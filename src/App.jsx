@@ -388,6 +388,18 @@ function App() {
     }
   };
 
+  const duplicateRound = async () => {
+    if (!roundData) return;
+    const ok = window.confirm('إنشاء جولة جديدة بنفس نوع الطعام واسم الجولة، دون نسخ طلبات الموظفين؟');
+    if (!ok) return;
+    await createRound({
+      foodType: roundData.food_type,
+      title: roundData.title ? `نسخة من ${roundData.title}` : 'جولة مكررة',
+      deadline: null,
+      file: null
+    });
+  };
+
   const updateRound = async patch => {
     if (!roundData) return;
 
@@ -584,6 +596,9 @@ function App() {
   if (!session) return <LoginScreen />;
 
   const participants = roundData ? getParticipants(roundData.orders) : [];
+  const aggregate = roundData ? aggregateItems(roundData.orders) : [];
+  const totalOrderedUnits = aggregate.reduce((sum, item) => sum + item.quantity, 0);
+  const popularItem = [...aggregate].sort((a, b) => b.quantity - a.quantity)[0];
 
   return <div className="app-shell">
     <header className="topbar">
@@ -630,6 +645,7 @@ function App() {
             <span className={`status ${isRoundOpen(roundData) ? 'open' : 'closed'}`}>
               {isRoundOpen(roundData) ? 'مفتوحة للطلبات' : 'مغلقة'}
             </span>
+            <button type="button" className="text-btn" disabled={busy} onClick={duplicateRound}>تكرار الجولة</button>
             <button type="button" className="text-btn danger" disabled={busy} onClick={deleteRound}>حذف الجولة</button>
           </div>
         </div>
@@ -642,6 +658,8 @@ function App() {
             onClick={() => document.getElementById('participants-dialog')?.showModal()}
           />
           <Stat label="موعد الإغلاق" value={roundData.deadline ? dateLabel(roundData.deadline) : 'مفتوحة'} />
+          <Stat label="إجمالي وحدات الأصناف" value={totalOrderedUnits} />
+          <Stat label="الأكثر طلبًا" value={popularItem ? `${popularItem.label} · ${popularItem.quantity}` : 'لا توجد أصناف'} />
         </div>
 
         <div className="tabs">
