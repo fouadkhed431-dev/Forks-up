@@ -175,9 +175,6 @@ function App() {
     const channel = supabase.channel(`round-${activeId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `round_id=eq.${activeId}` }, payload => {
         loadRound(activeId).catch(report);
-        if (payload.eventType === 'INSERT' && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification('طلب جديد · Forks Up', { body: `طلب جديد من ${payload.new?.employee_name || 'أحد الموظفين'}`, icon: '/forks-up-192.png' });
-        }
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter: `id=eq.${activeId}` }, () => {
         loadRounds().catch(report);
@@ -233,28 +230,6 @@ function App() {
     } catch (err) { report(err); }
     finally { setResourceBusy(false); }
   };
-
-  const enableNotifications = async () => {
-    if (!('Notification' in window)) {
-      flash('هذا المتصفح لا يدعم إشعارات النظام.');
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    flash(permission === 'granted' ? 'تم تفعيل إشعارات الطلبات على هذا الجهاز أثناء تشغيل التطبيق.' : 'لم يتم السماح بالإشعارات.');
-  };
-
-  useEffect(() => {
-    if (!session || !roundData?.deadline || !isRoundOpen(roundData) || !('Notification' in window) || Notification.permission !== 'granted') return;
-    const delay = new Date(roundData.deadline).getTime() - Date.now() - 30 * 60 * 1000;
-    if (delay <= 0) return;
-    const timer = window.setTimeout(() => {
-      if (Notification.permission === 'granted') new Notification('تذكير · Forks Up', {
-        body: `تبقى 30 دقيقة على إغلاق جولة ${roundData.food_type}.`,
-        icon: '/forks-up-192.png'
-      });
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [session, roundData?.id, roundData?.deadline, roundData?.status]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -517,7 +492,6 @@ function App() {
       <Logo />
       <div className="top-actions">
         <span className="hall-tag">HALL NO. 213</span>
-        <button className="secondary small-btn" type="button" onClick={enableNotifications}>تفعيل الإشعارات</button>
         <button className="logout-btn" onClick={signOut}>تسجيل الخروج</button>
       </div>
     </header>
