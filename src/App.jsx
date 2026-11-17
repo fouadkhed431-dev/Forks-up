@@ -1630,7 +1630,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
           <div className="invoice-action-row">
             <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png', true)}>{exporting === 'group' ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف الجماعي'}</button>
             <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png')}>تنزيل صورة الكشف</button>
-            <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال النص الجماعي عبر WhatsApp ↗</button>
+            <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result, round.payments || {})}>إرسال النص الجماعي عبر WhatsApp ↗</button>
           </div>
         </div>
 
@@ -1662,7 +1662,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
           <div className="invoice-action-row">
             <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
             <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
-            <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال النص عبر WhatsApp ↗</button>
+            <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person], round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0)}>إرسال النص عبر WhatsApp ↗</button>
           </div>
         </div>;
         })}
@@ -1728,7 +1728,7 @@ function formatBillDetails(bill) {
   return details.join('\n');
 }
 
-function shareBill(round, person, bill) {
+function shareBill(round, person, bill, amountPaid = 0) {
   const message = [
     '🍽️ FORKS UP | HALL NO. 213',
     `كشف حساب: ${person}`,
@@ -1739,19 +1739,23 @@ function shareBill(round, person, bill) {
     formatBillDetails(bill),
     '────────────────',
     `💰 الإجمالي المطلوب: ${money(bill.total)}`,
+    `💵 المدفوع: ${money(amountPaid)}`,
+    `المتبقي: ${money(Math.max(0, bill.total - Number(amountPaid || 0)))}`,
     '',
     'Bite Together. Order Smarter.'
   ].filter(Boolean).join('\n');
   openWhatsAppMessage(message);
 }
 
-function shareGroupBill(round, result) {
+function shareGroupBill(round, result, payments = {}) {
   const sections = result.people.map((person, index) => {
     const bill = result.bills[person];
     return [
       `👤 ${index + 1}) ${person}`,
       formatBillDetails(bill),
-      `الإجمالي: ${money(bill.total)}`
+      `الإجمالي: ${money(bill.total)}`,
+      `المدفوع: ${money(payments[person.trim().toLocaleLowerCase('ar')] || 0)}`,
+      `المتبقي: ${money(Math.max(0, bill.total - Number(payments[person.trim().toLocaleLowerCase('ar')] || 0)))}`
     ].join('\n');
   });
   const message = [
@@ -1763,6 +1767,7 @@ function shareGroupBill(round, result) {
     '════════════════',
     ...sections.flatMap(section => [section, '────────────────']),
     `🧾 إجمالي فاتورة الجولة: ${money(result.grandTotal)}`,
+    `💵 إجمالي المحصل: ${money(Object.values(payments).reduce((sum, value) => sum + Number(value || 0), 0))}`,
     '',
     'Bite Together. Order Smarter.'
   ].filter(Boolean).join('\n');
