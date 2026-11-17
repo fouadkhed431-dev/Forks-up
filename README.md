@@ -114,3 +114,20 @@ npm run dev
 - كل مسؤول يرى الجولات التي أنشأها فقط.
 - إرسال الطلبات العامة وتعديلها يمر عبر دوال SQL تتحقق من رمز الجولة وحالتها.
 - لا تضع مفاتيح Supabase السرية في GitHub أو داخل ملفات الواجهة.
+
+
+## Unified upgrade (2026-11-18)
+
+The unified feature update adds a Supabase migration at
+`supabase/migrations/202611180001_unified_upgrade.sql`.
+
+**Before using the updated app, run this migration once** in the Supabase SQL Editor for the connected project. It adds:
+- Financial settlement state for closed rounds.
+- Per-participant payments (including people who only join a shared item).
+- Employee directory and favorite food items.
+- Admin RPCs for round settlement and safe, owner-scoped JSON backup restoration.
+- Admin order corrections remain available after public ordering closes and before settlement.
+
+The app also includes JSON backup export/restore, order statistics, round duplication, logo-branded invoice images, browser notifications while the admin dashboard is open, and a QA checklist covering the new workflows.
+
+Browser notifications are local to the active browser session; remote push notifications while the app is closed require separate push-service credentials and server-side setup.
