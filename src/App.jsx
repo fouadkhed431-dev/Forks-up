@@ -129,15 +129,14 @@ function App() {
       return;
     }
 
-    const [roundResult, orderResult, priceResult, logResult, paymentResult] = await Promise.all([
+    const [roundResult, orderResult, priceResult, logResult] = await Promise.all([
       supabase.from('rounds').select('*').eq('id', id).single(),
       supabase.from('orders').select('*, order_items(*)').eq('round_id', id).order('created_at', { ascending: true }),
       supabase.from('item_prices').select('*').eq('round_id', id),
-      supabase.from('edit_logs').select('*').eq('round_id', id).order('created_at', { ascending: false }).limit(100),
-      supabase.from('round_payments').select('*').eq('round_id', id)
+      supabase.from('edit_logs').select('*').eq('round_id', id).order('created_at', { ascending: false }).limit(100)
     ]);
 
-    for (const result of [roundResult, orderResult, priceResult, logResult, paymentResult]) {
+    for (const result of [roundResult, orderResult, priceResult, logResult]) {
       if (result.error) throw result.error;
     }
 
@@ -150,9 +149,7 @@ function App() {
       orders: orderResult.data || [],
       prices: priceMap,
       priceRows: priceResult.data || [],
-      logs: logResult.data || [],
-      payments: Object.fromEntries((paymentResult.data || []).map(row => [row.employee_name.trim().toLocaleLowerCase('ar'), Number(row.amount_paid)])),
-      paymentRows: paymentResult.data || []
+      logs: logResult.data || []
     });
   }, []);
 
@@ -188,7 +185,6 @@ function App() {
         loadRound(activeId).catch(report);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item_prices', filter: `round_id=eq.${activeId}` }, () => loadRound(activeId).catch(report))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'round_payments', filter: `round_id=eq.${activeId}` }, () => loadRound(activeId).catch(report))
       .subscribe();
 
     return () => {
@@ -258,7 +254,7 @@ function App() {
   const exportBackup = async () => {
     setResourceBusy(true);
     try {
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','round_payments','employee_profiles','favorite_items'];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
       const data = {};
       for (const table of tables) {
         const { data: rows, error: queryError } = await supabase.from(table).select('*');
@@ -285,7 +281,7 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       if (backup?.app !== 'Forks Up' || backup?.version !== 1 || !backup?.data) throw new Error('ملف النسخة الاحتياطية غير صالح.');
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','round_payments','employee_profiles','favorite_items'];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
       for (const table of tables) {
         if (!Array.isArray(backup.data[table] || [])) throw new Error(`بيانات ${table} غير صالحة.`);
       }
@@ -551,35 +547,6 @@ function App() {
     }
   };
 
-  const updatePayment = async (person, total, amountPaid) => {
-    const paid = Math.max(0, Math.min(Number(total) || 0, Number(amountPaid) || 0));
-    const payment_status = paid <= 0 ? 'unpaid' : paid + 0.001 >= Number(total) ? 'paid' : 'partial';
-    const existing = (roundData.paymentRows || []).find(row => row.employee_name.trim().toLocaleLowerCase('ar') === person.trim().toLocaleLowerCase('ar'));
-    const paymentQuery = existing
-      ? supabase.from('round_payments').update({ amount_paid: paid }).eq('id', existing.id)
-      : supabase.from('round_payments').insert({ round_id: roundData.id, employee_name: person.trim(), amount_paid: paid });
-    const { error: paymentError } = await paymentQuery;
-    if (paymentError) throw paymentError;
-    await loadRound(roundData.id);
-    flash('تم تحديث حالة الدفع');
-  };
-
-  const settleRound = async () => {
-    if (!roundData || roundData.status !== 'closed') return;
-    if (!window.confirm('اعتماد التسوية المالية وإقفال الجولة نهائيًا؟')) return;
-    setBusy(true);
-    try {
-      const { error: settleError } = await supabase.rpc('admin_settle_round', { p_round_id: roundData.id });
-      if (settleError) throw settleError;
-      await loadRound(roundData.id);
-      flash('تم اعتماد التسوية المالية');
-    } catch (err) {
-      report(err);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const deleteOrder = async order => {
     if (!window.confirm(`حذف طلب ${order.employee_name} بالكامل؟`)) return;
 
@@ -710,8 +677,6 @@ function App() {
         {tab === 'invoice' && <InvoicePanel
           round={roundData}
           busy={busy}
-          onPaymentUpdate={updatePayment}
-          onSettle={settleRound}
           onSave={async (prices, delivery) => {
             setBusy(true);
             setError('');
@@ -1405,7 +1370,7 @@ function GuestPage({ token, onBack }) {
 }
 
 function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDelete, onCreate, onToggle }) {
-  const canEdit = round.settlement_status !== 'settled';
+  const canEdit = true;
   const canAdd = isRoundOpen(round);
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
@@ -1415,7 +1380,7 @@ function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDe
         <h3>طلبات الموظفين</h3>
         <p className="muted">{canEdit ? (canAdd ? 'يمكنك تعديل الطلبات وإضافة طلبات جديدة قبل الإغلاق.' : 'استقبال الطلبات مغلق؛ يمكنك تصحيح الطلبات حتى اعتماد التسوية المالية.') : 'تم اعتماد التسوية؛ التعديلات المالية والطلبات مقفلة.'}</p>
       </div>
-      <button className="secondary small-btn" disabled={busy || expired || round.settlement_status === 'settled'} onClick={onToggle}>
+      <button className="secondary small-btn" disabled={busy || expired || false} onClick={onToggle}>
         {expired ? 'انتهى الموعد' : round.status === 'open' ? 'إغلاق الجولة' : 'إعادة فتح الجولة'}
       </button>
     </div>
@@ -1537,7 +1502,7 @@ function EditOrder({ order, busy, onCancel, onSave }) {
   </form>;
 }
 
-function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
+function InvoicePanel({ round, busy, onSave }) {
   const lines = useMemo(() => aggregateItems(round.orders), [round.orders]);
   const imageRefs = useRef({});
   const [exporting, setExporting] = useState('');
@@ -1586,10 +1551,6 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
     prices[line.key] === '' ||
     !Number.isFinite(Number(prices[line.key]))
   );
-  const totalPaid = result.people.reduce((sum, person) => sum + Number(round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0), 0);
-  const totalRemaining = Math.max(0, result.grandTotal - totalPaid);
-  const allPaid = result.people.length > 0 && totalRemaining < 0.01;
-
   return <div className="panel card">
     {!isRoundOpen(round) && <div className="deadline-note" style={{ marginBottom: 14 }}>
       تم إغلاق استقبال الطلبات. يمكنك الآن، بصفتك المسؤول، استكمال إدخال الأسعار وحفظ الفواتير وإرسال الحسابات الفردية والجماعية دون إعادة فتح الجولة.
@@ -1599,7 +1560,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
         <h3>إدخال الفاتورة</h3>
         <p className="muted">اكتب سعر الوحدة لكل صنف كما ورد في فاتورة المطعم.</p>
       </div>
-      <button className="primary small-btn" disabled={busy || missingPrices.length > 0 || round.settlement_status === 'settled'} onClick={() => onSave(prices, delivery)}>حفظ الحسابات</button>
+      <button className="primary small-btn" disabled={busy || missingPrices.length > 0 || false} onClick={() => onSave(prices, delivery)}>حفظ الحسابات</button>
     </div>
 
     {!lines.length ? <div className="empty-inline">أضف طلبات أولاً حتى تظهر الأصناف هنا.</div> : <>
@@ -1608,7 +1569,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
         {lines.map(line => <div className="price-row" key={line.key}>
           <b>{line.label}</b>
           <span>{line.quantity}</span>
-          <input type="number" min="0" step="0.01" value={prices[line.key] ?? ''} placeholder="0.00" disabled={round.settlement_status === 'settled'} onChange={e => setPrices(old => ({ ...old, [line.key]: e.target.value }))} />
+          <input type="number" min="0" step="0.01" value={prices[line.key] ?? ''} placeholder="0.00"  onChange={e => setPrices(old => ({ ...old, [line.key]: e.target.value }))} />
         </div>)}
       </div>
 
@@ -1616,71 +1577,49 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
 
       <div className="delivery-row">
         <label>إجمالي التوصيل والمصاريف الإضافية (ج.م)
-          <input type="number" min="0" step="0.01" value={delivery} disabled={round.settlement_status === 'settled'} onChange={e => setDelivery(e.target.value)} />
+          <input type="number" min="0" step="0.01" value={delivery}  onChange={e => setDelivery(e.target.value)} />
         </label>
         <small>يُقسم بالتساوي على جميع المشاركين، بمن فيهم من شارك في صنف مشترك.</small>
       </div>
 
       {missingPrices.length === 0 && <div className="bill-list">
         <div className="bill-title"><h3>كشوف الحسابات</h3><b>إجمالي الفاتورة: {money(result.grandTotal)}</b></div>
-        <div className="settlement-summary" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '10px 0 16px' }}>
-          <span>المحصل: <b>{money(totalPaid)}</b></span>
-          <span>المتبقي: <b>{money(totalRemaining)}</b></span>
-        </div>
         <div className="bill-sharing-options">
           <p className="muted">اختر طريقة إرسال الكشف عبر WhatsApp:</p>
           <div className="invoice-action-row">
             <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png', true)}>{exporting === 'group' ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف الجماعي'}</button>
             <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png')}>تنزيل صورة الكشف</button>
-            <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result, round.payments || {})}>إرسال النص الجماعي عبر WhatsApp ↗</button>
+            <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال النص الجماعي عبر WhatsApp ↗</button>
           </div>
         </div>
 
         {result.people.map(person => {
-          const order = round.orders.find(entry => entry.employee_name === person);
-          const paid = Number(round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0);
-          const total = Number(result.bills[person].total || 0);
-          const paymentState = paid <= 0 ? 'لم يدفع' : paid + 0.001 >= total ? 'دفع بالكامل' : 'دفع جزئيًا';
           return <div className="bill-person" key={person}>
-          <div className="bill-person-head">
-            <b>{person}</b>
-            <strong>{money(result.bills[person].total)}</strong>
-          </div>
-
-          <div className="bill-details">
-            {result.bills[person].items.map((item, index) => <div key={`${item.description}-${index}`}>
-              <span>{item.description} × {item.quantity}{item.shared ? ' (مشترك)' : ' (فردي)'}</span>
-              <span>{money(item.amount)}</span>
-            </div>)}
-            <div><span>نصيب التوصيل والمصاريف</span><span>{money(result.bills[person].delivery)}</span></div>
-          </div>
-
-          <div className="payment-entry" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '12px 0' }}>
-            <span className="hint">حالة الدفع: <b>{paymentState}</b></span>
-            <span className="hint">المدفوع: {money(paid)} · المتبقي: {money(Math.max(0, total - paid))}</span>
-            <input aria-label={`المبلغ المدفوع من ${person}`} type="number" min="0" max={total} step="0.01" disabled={round.settlement_status === 'settled'} defaultValue={paid} key={`${person}-${paid}`} id={`paid-${safeFileName(person)}`} style={{ width: 112 }} />
-            <button type="button" className="secondary small-btn" disabled={busy || round.settlement_status === 'settled'} onClick={() => onPaymentUpdate(person, total, document.getElementById(`paid-${safeFileName(person)}`)?.value)}>حفظ الدفع</button>
-          </div>
-          <div className="invoice-action-row">
-            <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
-            <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
-            <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person], round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0)}>إرسال النص عبر WhatsApp ↗</button>
-          </div>
-        </div>;
+            <div className="bill-person-head">
+              <b>{person}</b>
+              <strong>{money(result.bills[person].total)}</strong>
+            </div>
+            <div className="bill-details">
+              {result.bills[person].items.map((item, index) => <div key={`${item.description}-${index}`}>
+                <span>{item.description} × {item.quantity}{item.shared ? ' (مشترك)' : ' (فردي)'}</span>
+                <span>{money(item.amount)}</span>
+              </div>)}
+              <div><span>نصيب التوصيل والمصاريف</span><span>{money(result.bills[person].delivery)}</span></div>
+            </div>
+            <div className="invoice-action-row">
+              <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
+              <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
+              <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال النص عبر WhatsApp ↗</button>
+            </div>
+          </div>;
         })}
       </div>}
-      {round.status === 'closed' && <div className="settlement-row" style={{ marginTop: 18, padding: 16, borderRadius: 14, background: '#f3eee2' }}>
-        <b>التسوية المالية: {round.settlement_status === 'settled' ? 'معتمدة ومقفلة' : 'بانتظار الاعتماد'}</b>
-        {round.settlement_status !== 'settled' && <>
-          {!allPaid && <p className="hint">سجّل تحصيل المبالغ بالكامل قبل اعتماد التسوية. المتبقي حاليًا: {money(totalRemaining)}</p>}
-          <button type="button" className="primary small-btn" disabled={busy || missingPrices.length > 0 || !allPaid} onClick={onSettle}>اعتماد التسوية وإقفال الجولة ماليًا</button>
-        </>}
-      </div>}
+
     </>}
 
     {missingPrices.length === 0 && <div style={{ position: 'absolute', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
-      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person], amountPaid: round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0 }))} grandTotal={result.grandTotal} />
-      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person], amountPaid: round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0 }]} grandTotal={result.bills[person].total} />)}
+      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person] }))} grandTotal={result.grandTotal} />
+      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person] }]} grandTotal={result.bills[person].total} />)}
     </div>}
   </div>;
 }
@@ -1707,8 +1646,6 @@ function InvoiceImageCard({ refCallback, round, title, people, grandTotal }) {
         <span>{item.description} × {item.quantity} <small style={{ color: '#777' }}>({item.shared ? 'مشترك' : 'فردي'})</small></span><strong style={{ whiteSpace: 'nowrap' }}>{money(item.amount)}</strong>
       </div>)}
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', fontSize: '16px' }}><span>نصيب التوصيل والمصاريف</span><strong>{money(person.bill.delivery)}</strong></div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', fontSize: '15px', color: '#53645b' }}><span>المدفوع</span><strong>{money(person.amountPaid || 0)}</strong></div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', fontSize: '15px', color: '#53645b' }}><span>المتبقي</span><strong>{money(Math.max(0, person.bill.total - Number(person.amountPaid || 0)))}</strong></div>
     </div>)}
     <div style={{ background: '#f5b66b', borderRadius: '18px', padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#26312b' }}>
       <strong style={{ fontSize: '22px' }}>الإجمالي المطلوب</strong><strong style={{ fontSize: '30px' }}>{money(grandTotal)}</strong>
@@ -1730,7 +1667,7 @@ function formatBillDetails(bill) {
   return details.join('\n');
 }
 
-function shareBill(round, person, bill, amountPaid = 0) {
+function shareBill(round, person, bill) {
   const message = [
     '🍽️ FORKS UP | HALL NO. 213',
     `كشف حساب: ${person}`,
@@ -1741,23 +1678,19 @@ function shareBill(round, person, bill, amountPaid = 0) {
     formatBillDetails(bill),
     '────────────────',
     `💰 الإجمالي المطلوب: ${money(bill.total)}`,
-    `💵 المدفوع: ${money(amountPaid)}`,
-    `المتبقي: ${money(Math.max(0, bill.total - Number(amountPaid || 0)))}`,
     '',
     'Bite Together. Order Smarter.'
   ].filter(Boolean).join('\n');
   openWhatsAppMessage(message);
 }
 
-function shareGroupBill(round, result, payments = {}) {
+function shareGroupBill(round, result) {
   const sections = result.people.map((person, index) => {
     const bill = result.bills[person];
     return [
       `👤 ${index + 1}) ${person}`,
       formatBillDetails(bill),
       `الإجمالي: ${money(bill.total)}`,
-      `المدفوع: ${money(payments[person.trim().toLocaleLowerCase('ar')] || 0)}`,
-      `المتبقي: ${money(Math.max(0, bill.total - Number(payments[person.trim().toLocaleLowerCase('ar')] || 0)))}`
     ].join('\n');
   });
   const message = [
@@ -1769,7 +1702,6 @@ function shareGroupBill(round, result, payments = {}) {
     '════════════════',
     ...sections.flatMap(section => [section, '────────────────']),
     `🧾 إجمالي فاتورة الجولة: ${money(result.grandTotal)}`,
-    `💵 إجمالي المحصل: ${money(Object.values(payments).reduce((sum, value) => sum + Number(value || 0), 0))}`,
     '',
     'Bite Together. Order Smarter.'
   ].filter(Boolean).join('\n');
