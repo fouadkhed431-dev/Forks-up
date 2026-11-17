@@ -12,6 +12,25 @@ alter table public.orders
   add column if not exists amount_paid numeric(12,2) not null default 0
     check (amount_paid >= 0);
 
+create table if not exists public.round_payments (
+  id uuid primary key default gen_random_uuid(),
+  round_id uuid not null references public.rounds(id) on delete cascade,
+  employee_name text not null check (length(trim(employee_name)) between 2 and 100),
+  amount_paid numeric(12,2) not null default 0 check (amount_paid >= 0),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists round_payments_round_person_uidx
+  on public.round_payments(round_id, lower(trim(employee_name)));
+alter table public.round_payments enable row level security;
+drop policy if exists "admin manages own round payments" on public.round_payments;
+create policy "admin manages own round payments" on public.round_payments
+  for all to authenticated using (
+    exists(select 1 from public.rounds r where r.id=round_id and r.created_by=auth.uid())
+  ) with check (
+    exists(select 1 from public.rounds r where r.id=round_id and r.created_by=auth.uid())
+  );
+grant select, insert, update, delete on public.round_payments to authenticated;
+
 create table if not exists public.employee_profiles (
   id uuid primary key default gen_random_uuid(),
   created_by uuid not null references auth.users(id) on delete cascade,
@@ -221,6 +240,15 @@ begin
     values((v->>'id')::uuid,v_order_id,v->>'description',coalesce((v->>'quantity')::integer,1),
       coalesce(v->>'kind','individual'),coalesce(array(select jsonb_array_elements_text(coalesce(v->'participants','[]'::jsonb))),'{}'))
     on conflict(id) do update set description=excluded.description,quantity=excluded.quantity,kind=excluded.kind,participants=excluded.participants;
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'round_payments','[]'::jsonb)) loop
+    v_round_id := (v->>'round_id')::uuid;
+    if not exists(select 1 from public.rounds where id=v_round_id and created_by=auth.uid()) then continue; end if;
+    insert into public.round_payments(id,round_id,employee_name,amount_paid,updated_at)
+    values((v->>'id')::uuid,v_round_id,v->>'employee_name',coalesce((v->>'amount_paid')::numeric,0),
+      coalesce(nullif(v->>'updated_at','')::timestamptz,now()))
+    on conflict(round_id, lower(trim(employee_name))) do update set amount_paid=excluded.amount_paid,updated_at=excluded.updated_at;
   end loop;
 
   for v in select value from jsonb_array_elements(coalesce(p_backup->'item_prices','[]'::jsonb)) loop
