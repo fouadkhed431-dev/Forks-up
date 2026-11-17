@@ -45,9 +45,12 @@ function App() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [routeToken, setRouteToken] = useState(new URLSearchParams(window.location.search).get('token'));
-  const [employees, setEmployees] = useState([]);
   const [resourceBusy, setResourceBusy] = useState(false);
   const [roundSearch, setRoundSearch] = useState('');
+
+  const employeeNames = useMemo(() => [...new Set(
+    (roundData?.orders || []).map(order => order.employee_name?.trim()).filter(Boolean)
+  )], [roundData?.orders]);
 
 
   const flash = useCallback(message => {
@@ -191,45 +194,10 @@ function App() {
     };
   }, [session, activeId, loadRound, loadRounds, report]);
 
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setEmployees([]);
-      return;
-    }
-    let active = true;
-    supabase.from('employee_profiles').select('*').order('employee_name')
-      .then(({ data, error: queryError }) => {
-        if (!active) return;
-        if (queryError) throw queryError;
-        setEmployees(data || []);
-      }).catch(report);
-    return () => { active = false; };
-  }, [session?.user?.id, report]);
-
-  const refreshDirectory = async () => {
-    const { data, error: queryError } = await supabase.from('employee_profiles').select('*').order('employee_name');
-    if (queryError) throw queryError;
-    setEmployees(data || []);
-  };
-
-  const addEmployee = async (employee_name, phone = '') => {
-    const { error: insertError } = await supabase.from('employee_profiles')
-      .insert({ created_by: session.user.id, employee_name: employee_name.trim(), phone: phone.trim() || null });
-    if (insertError) throw insertError;
-    await refreshDirectory();
-    flash('تم حفظ الموظف في الدليل');
-  };
-
-  const removeEmployee = async id => {
-    const { error: deleteError } = await supabase.from('employee_profiles').delete().eq('id', id);
-    if (deleteError) throw deleteError;
-    await refreshDirectory();
-  };
-
   const exportBackup = async () => {
     setResourceBusy(true);
     try {
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles',];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs',];
       const data = {};
       for (const table of tables) {
         const { data: rows, error: queryError } = await supabase.from(table).select('*');
@@ -256,13 +224,13 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       if (backup?.app !== 'Forks Up' || backup?.version !== 1 || !backup?.data) throw new Error('ملف النسخة الاحتياطية غير صالح.');
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles',];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs',];
       for (const table of tables) {
         if (!Array.isArray(backup.data[table] || [])) throw new Error(`بيانات ${table} غير صالحة.`);
       }
       const { error: restoreError } = await supabase.rpc('admin_restore_backup', { p_backup: backup.data });
       if (restoreError) throw restoreError;
-      await Promise.all([loadRounds(), refreshDirectory()]);
+      await loadRounds();
       if (activeId) await loadRound(activeId);
       flash('تم استيراد ودمج النسخة الاحتياطية');
     } catch (err) { report(err); }
@@ -290,28 +258,6 @@ function App() {
     }, delay);
     return () => window.clearTimeout(timer);
   }, [session, roundData?.id, roundData?.deadline, roundData?.status]);
-
-  useEffect(() => {
-    if (!session?.user?.id || !roundData?.orders?.length) return;
-    let active = true;
-    const syncNames = async () => {
-      const names = [...new Set(roundData.orders.map(order => order.employee_name?.trim()).filter(Boolean))];
-      if (!names.length) return;
-      const { data: existing, error: readError } = await supabase.from('employee_profiles')
-        .select('employee_name').in('employee_name', names);
-      if (readError) throw readError;
-      const known = new Set((existing || []).map(row => row.employee_name.trim().toLocaleLowerCase('ar')));
-      const missing = names.filter(name => !known.has(name.toLocaleLowerCase('ar')));
-      if (missing.length) {
-        const { error: insertError } = await supabase.from('employee_profiles')
-          .insert(missing.map(employee_name => ({ created_by: session.user.id, employee_name })));
-        if (insertError && !String(insertError.message || '').toLowerCase().includes('duplicate')) throw insertError;
-        if (active) await refreshDirectory();
-      }
-    };
-    syncNames().catch(report);
-    return () => { active = false; };
-  }, [session?.user?.id, roundData?.orders]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -640,7 +586,6 @@ function App() {
 
         {tab === 'orders' && <OrdersPanel
           round={roundData}
-          employees={employees}
           busy={busy}
           onSave={saveOrder}
           onDelete={deleteOrder}
@@ -705,7 +650,6 @@ function App() {
       <section className="panel card" style={{ marginTop: 24 }}>
         <div className="panel-title"><div><h3>دليل الفريق والنسخ الاحتياطي</h3><p className="muted">أدوات مساعدة لكل جولات Hall No. 213.</p></div></div>
         <div className="tools-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 16 }}>
-          <EmployeesPanel employees={employees} busy={resourceBusy} onAdd={addEmployee} onDelete={removeEmployee} />
           <BackupPanel busy={resourceBusy} onExport={exportBackup} onImport={importBackup} />
         </div>
       </section>
@@ -999,7 +943,8 @@ function CreateRoundDialog({ onCreate, busy }) {
 }
 
 // نافذة إضافة شخص وطلبه مباشرة بواسطة المسؤول
-function AdminCreateOrderDialog({ round, employees = [], busy, onCreate }) {
+function AdminCreateOrderDialog({ round, busy, onCreate }) {
+  const employeeNames = [...new Set((round.orders || []).map(order => order.employee_name?.trim()).filter(Boolean))];
   const emptyItem = () => ({
     key: crypto.randomUUID(),
     description: '',
@@ -1076,13 +1021,12 @@ function AdminCreateOrderDialog({ round, employees = [], busy, onCreate }) {
         required
         minLength="2"
         maxLength="100"
-        list="forks-up-employee-list"
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="اكتب اسم الشخص"
       />
       <datalist id="forks-up-employee-list">
-        {employees.map(person => <option key={person.id} value={person.employee_name} />)}
+        {employeeNames.map(name => <option key={name} value={name} />)}
       </datalist>
 
       <div className="form-divider" />
@@ -1337,7 +1281,7 @@ function GuestPage({ token, onBack }) {
   </div>;
 }
 
-function OrdersPanel({ round, employees = [], busy, onSave, onDelete, onCreate, onToggle }) {
+function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
   const canEdit = true;
   const canAdd = isRoundOpen(round);
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
@@ -1363,7 +1307,7 @@ function OrdersPanel({ round, employees = [], busy, onSave, onDelete, onCreate, 
       {!canAdd && <small className="hint">إضافة طلبات جديدة متاحة عند فتح الجولة فقط؛ يمكن للمسؤول تصحيح الطلبات الحالية قبل التسوية.</small>}
     </div>
 
-    <AdminCreateOrderDialog round={round} employees={employees} busy={busy} onCreate={onCreate} />
+    <AdminCreateOrderDialog round={round} busy={busy} onCreate={onCreate} />
 
     {!round.orders.length
       ? <div className="empty-inline">لا توجد طلبات حتى الآن. يمكنك إضافة طلب بنفسك أو مشاركة QR Code ليبدأ الموظفون التسجيل.</div>
@@ -1731,30 +1675,6 @@ function SharePanel({ round }) {
       <QRCodeSVG value={link} size={210} level="H" includeMargin />
       <b>Forks Up · HALL 213</b>
       <small>امسح الكود لتسجيل طلبك</small>
-    </div>
-  </div>;
-}
-
-function EmployeesPanel({ employees, busy, onAdd, onDelete }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [error, setError] = useState('');
-  const submit = async event => {
-    event.preventDefault(); setError('');
-    try { await onAdd(name, phone); setName(''); setPhone(''); }
-    catch (err) { setError(err.message || 'تعذر حفظ الموظف.'); }
-  };
-  return <div className="sub-panel" style={{ border: '1px solid var(--line,#e6dfd0)', borderRadius: 14, padding: 14 }}>
-    <h4>ملفات الموظفين ({employees.length})</h4>
-    <form onSubmit={submit} style={{ display: 'grid', gap: 8 }}>
-      <input required minLength="2" maxLength="100" value={name} onChange={e=>setName(e.target.value)} placeholder="اسم الموظف" />
-      <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="رقم الهاتف (اختياري)" />
-      <button className="secondary small-btn" disabled={busy}>إضافة إلى الدليل</button>
-    </form>
-    {error && <small className="inline-error">{error}</small>}
-    <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 10 }}>
-      {employees.map(person=><div key={person.id} className="history-row"><b>{person.employee_name}</b><span>{person.phone || ''}</span><button className="text-btn danger" disabled={busy} onClick={()=>onDelete(person.id)}>حذف</button></div>)}
-      {!employees.length && <small className="muted">لا يوجد موظفون محفوظون بعد.</small>}
     </div>
   </div>;
 }
