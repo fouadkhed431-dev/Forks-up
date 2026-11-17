@@ -177,9 +177,92 @@ begin
 end;
 $$;
 
+
+create or replace function public.admin_restore_backup(p_backup jsonb)
+returns void language plpgsql security definer set search_path = public as $
+declare
+  v jsonb;
+  v_round_id uuid;
+  v_order_id uuid;
+begin
+  if auth.uid() is null then raise exception 'NOT_ALLOWED'; end if;
+  if p_backup is null or jsonb_typeof(p_backup) <> 'object' then raise exception 'INVALID_BACKUP'; end if;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'rounds','[]'::jsonb)) loop
+    insert into public.rounds(id,created_by,public_token,title,food_type,deadline,status,menu_path,delivery_fee,settlement_status,settled_at,created_at,updated_at)
+    values((v->>'id')::uuid,auth.uid(),coalesce((v->>'public_token')::uuid,gen_random_uuid()),
+      coalesce(v->>'title',''),coalesce(v->>'food_type','Imported round'),
+      nullif(v->>'deadline','')::timestamptz,coalesce(v->>'status','closed'),v->>'menu_path',
+      coalesce((v->>'delivery_fee')::numeric,0),coalesce(v->>'settlement_status','draft'),
+      nullif(v->>'settled_at','')::timestamptz,coalesce(nullif(v->>'created_at','')::timestamptz,now()),
+      coalesce(nullif(v->>'updated_at','')::timestamptz,now()))
+    on conflict(id) do update set title=excluded.title,food_type=excluded.food_type,deadline=excluded.deadline,
+      status=excluded.status,menu_path=excluded.menu_path,delivery_fee=excluded.delivery_fee,
+      settlement_status=excluded.settlement_status,settled_at=excluded.settled_at
+    where public.rounds.created_by=auth.uid();
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'orders','[]'::jsonb)) loop
+    v_round_id := (v->>'round_id')::uuid;
+    if not exists(select 1 from public.rounds where id=v_round_id and created_by=auth.uid()) then continue; end if;
+    insert into public.orders(id,round_id,employee_name,created_at,updated_at,payment_status,amount_paid)
+    values((v->>'id')::uuid,v_round_id,v->>'employee_name',
+      coalesce(nullif(v->>'created_at','')::timestamptz,now()),
+      coalesce(nullif(v->>'updated_at','')::timestamptz,now()),
+      coalesce(v->>'payment_status','unpaid'),coalesce((v->>'amount_paid')::numeric,0))
+    on conflict(id) do update set employee_name=excluded.employee_name,payment_status=excluded.payment_status,amount_paid=excluded.amount_paid
+    where exists(select 1 from public.rounds r where r.id=public.orders.round_id and r.created_by=auth.uid());
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'order_items','[]'::jsonb)) loop
+    v_order_id := (v->>'order_id')::uuid;
+    if not exists(select 1 from public.orders o join public.rounds r on r.id=o.round_id where o.id=v_order_id and r.created_by=auth.uid()) then continue; end if;
+    insert into public.order_items(id,order_id,description,quantity,kind,participants)
+    values((v->>'id')::uuid,v_order_id,v->>'description',coalesce((v->>'quantity')::integer,1),
+      coalesce(v->>'kind','individual'),coalesce(array(select jsonb_array_elements_text(coalesce(v->'participants','[]'::jsonb))),'{}'))
+    on conflict(id) do update set description=excluded.description,quantity=excluded.quantity,kind=excluded.kind,participants=excluded.participants;
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'item_prices','[]'::jsonb)) loop
+    v_round_id := (v->>'round_id')::uuid;
+    if not exists(select 1 from public.rounds where id=v_round_id and created_by=auth.uid()) then continue; end if;
+    insert into public.item_prices(id,round_id,normalized_name,display_name,unit_price)
+    values((v->>'id')::uuid,v_round_id,v->>'normalized_name',v->>'display_name',coalesce((v->>'unit_price')::numeric,0))
+    on conflict(round_id,normalized_name) do update set display_name=excluded.display_name,unit_price=excluded.unit_price;
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'edit_logs','[]'::jsonb)) loop
+    v_round_id := (v->>'round_id')::uuid;
+    if not exists(select 1 from public.rounds where id=v_round_id and created_by=auth.uid()) then continue; end if;
+    insert into public.edit_logs(id,round_id,order_id,actor_id,action,before_data,after_data,created_at)
+    values((v->>'id')::uuid,v_round_id,nullif(v->>'order_id','')::uuid,auth.uid(),coalesce(v->>'action','backup_restore'),
+      v->'before_data',v->'after_data',coalesce(nullif(v->>'created_at','')::timestamptz,now()))
+    on conflict(id) do nothing;
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'employee_profiles','[]'::jsonb)) loop
+    insert into public.employee_profiles(id,created_by,employee_name,phone,notes,created_at,updated_at)
+    values((v->>'id')::uuid,auth.uid(),v->>'employee_name',v->>'phone',v->>'notes',
+      coalesce(nullif(v->>'created_at','')::timestamptz,now()),coalesce(nullif(v->>'updated_at','')::timestamptz,now()))
+    on conflict(id) do update set employee_name=excluded.employee_name,phone=excluded.phone,notes=excluded.notes
+    where public.employee_profiles.created_by=auth.uid();
+  end loop;
+
+  for v in select value from jsonb_array_elements(coalesce(p_backup->'favorite_items','[]'::jsonb)) loop
+    insert into public.favorite_items(id,created_by,item_name,restaurant_name,created_at)
+    values((v->>'id')::uuid,auth.uid(),v->>'item_name',coalesce(v->>'restaurant_name',''),
+      coalesce(nullif(v->>'created_at','')::timestamptz,now()))
+    on conflict(id) do update set item_name=excluded.item_name,restaurant_name=excluded.restaurant_name
+    where public.favorite_items.created_by=auth.uid();
+  end loop;
+end;
+$;
+
 revoke all on function public.admin_create_order(uuid,text,jsonb) from public;
 revoke all on function public.admin_settle_round(uuid) from public;
+revoke all on function public.admin_restore_backup(jsonb) from public;
 grant execute on function public.admin_create_order(uuid,text,jsonb) to authenticated;
 grant execute on function public.admin_settle_round(uuid) to authenticated;
+grant execute on function public.admin_restore_backup(jsonb) to authenticated;
 
 commit;
