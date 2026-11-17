@@ -129,11 +129,16 @@ function App() {
     }
 
     const [roundResult, orderResult, priceResult, logResult] = await Promise.all([
-      supabase.from('rounds').select('*').eq('id', id).single(),
+      supabase.from('rounds').select('*').eq('id', id).maybeSingle(),
       supabase.from('orders').select('*, order_items(*)').eq('round_id', id).order('created_at', { ascending: true }),
       supabase.from('item_prices').select('*').eq('round_id', id),
       supabase.from('edit_logs').select('*').eq('round_id', id).order('created_at', { ascending: false }).limit(100)
     ]);
+
+    if (!roundResult.data && !roundResult.error) {
+      setRoundData(null);
+      return;
+    }
 
     for (const result of [roundResult, orderResult, priceResult, logResult]) {
       if (result.error) throw result.error;
