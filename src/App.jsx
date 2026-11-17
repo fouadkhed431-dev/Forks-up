@@ -1399,7 +1399,7 @@ function GuestPage({ token, onBack }) {
 }
 
 function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDelete, onCreate, onToggle }) {
-  const canEdit = isRoundOpen(round);
+  const canEdit = round.settlement_status !== 'settled';
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
   return <div className="panel card">
@@ -1408,7 +1408,7 @@ function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDe
         <h3>طلبات الموظفين</h3>
         <p className="muted">{canEdit ? 'يمكنك تعديل أي طلب قبل إغلاق الجولة.' : expired ? 'انتهى موعد الجولة؛ التعديل والحذف متوقفان.' : 'تم إغلاق الجولة؛ التعديل والحذف متوقفان.'}</p>
       </div>
-      <button className="secondary small-btn" disabled={busy || expired} onClick={onToggle}>
+      <button className="secondary small-btn" disabled={busy || expired || round.settlement_status === 'settled'} onClick={onToggle}>
         {expired ? 'انتهى الموعد' : round.status === 'open' ? 'إغلاق الجولة' : 'إعادة فتح الجولة'}
       </button>
     </div>
@@ -1589,7 +1589,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
         <h3>إدخال الفاتورة</h3>
         <p className="muted">اكتب سعر الوحدة لكل صنف كما ورد في فاتورة المطعم.</p>
       </div>
-      <button className="primary small-btn" disabled={busy || missingPrices.length > 0} onClick={() => onSave(prices, delivery)}>حفظ الحسابات</button>
+      <button className="primary small-btn" disabled={busy || missingPrices.length > 0 || round.settlement_status === 'settled'} onClick={() => onSave(prices, delivery)}>حفظ الحسابات</button>
     </div>
 
     {!lines.length ? <div className="empty-inline">أضف طلبات أولاً حتى تظهر الأصناف هنا.</div> : <>
@@ -1598,7 +1598,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
         {lines.map(line => <div className="price-row" key={line.key}>
           <b>{line.label}</b>
           <span>{line.quantity}</span>
-          <input type="number" min="0" step="0.01" value={prices[line.key] ?? ''} placeholder="0.00" onChange={e => setPrices(old => ({ ...old, [line.key]: e.target.value }))} />
+          <input type="number" min="0" step="0.01" value={prices[line.key] ?? ''} placeholder="0.00" disabled={round.settlement_status === 'settled'} onChange={e => setPrices(old => ({ ...old, [line.key]: e.target.value }))} />
         </div>)}
       </div>
 
@@ -1606,7 +1606,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
 
       <div className="delivery-row">
         <label>إجمالي التوصيل والمصاريف الإضافية (ج.م)
-          <input type="number" min="0" step="0.01" value={delivery} onChange={e => setDelivery(e.target.value)} />
+          <input type="number" min="0" step="0.01" value={delivery} disabled={round.settlement_status === 'settled'} onChange={e => setDelivery(e.target.value)} />
         </label>
         <small>يُقسم بالتساوي على جميع المشاركين، بمن فيهم من شارك في صنف مشترك.</small>
       </div>
@@ -1644,8 +1644,8 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
           <div className="payment-entry" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '12px 0' }}>
             <span className="hint">حالة الدفع: <b>{paymentState}</b></span>
             <span className="hint">المدفوع: {money(paid)} · المتبقي: {money(Math.max(0, total - paid))}</span>
-            <input aria-label={`المبلغ المدفوع من ${person}`} type="number" min="0" max={total} step="0.01" defaultValue={paid} key={`${person}-${paid}`} id={`paid-${safeFileName(person)}`} style={{ width: 112 }} />
-            <button type="button" className="secondary small-btn" disabled={busy} onClick={() => onPaymentUpdate(person, total, document.getElementById(`paid-${safeFileName(person)}`)?.value)}>حفظ الدفع</button>
+            <input aria-label={`المبلغ المدفوع من ${person}`} type="number" min="0" max={total} step="0.01" disabled={round.settlement_status === 'settled'} defaultValue={paid} key={`${person}-${paid}`} id={`paid-${safeFileName(person)}`} style={{ width: 112 }} />
+            <button type="button" className="secondary small-btn" disabled={busy || round.settlement_status === 'settled'} onClick={() => onPaymentUpdate(person, total, document.getElementById(`paid-${safeFileName(person)}`)?.value)}>حفظ الدفع</button>
           </div>
           <div className="invoice-action-row">
             <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
