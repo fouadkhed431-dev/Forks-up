@@ -1068,7 +1068,11 @@ function InvoicePanel({ round, busy, onSave }) {
       </div>
 
       {missingPrices.length === 0 && <div className="bill-list">
-        <div className="bill-title"><h3>كشف الحساب الفردي</h3><b>إجمالي الفاتورة: {money(result.grandTotal)}</b></div>
+        <div className="bill-title"><h3>كشوف الحسابات</h3><b>إجمالي الفاتورة: {money(result.grandTotal)}</b></div>
+<div className="bill-sharing-options">
+  <p className="muted">اختر طريقة إرسال الكشف عبر WhatsApp:</p>
+  <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال الكشف الجماعي لكل الموظفين ↗</button>
+</div>
 
         {result.people.map(person => <div className="bill-person" key={person}>
           <div className="bill-person-head">
@@ -1091,14 +1095,58 @@ function InvoicePanel({ round, busy, onSave }) {
   </div>;
 }
 
-function shareBill(round, person, bill) {
-  const details = bill.items.map(item =>
-    `• ${item.description} × ${item.quantity} — ${item.shared ? 'مشترك' : 'فردي'}: ${money(item.amount)}`
-  ).join('\n');
-
-  const message = `Forks Up — ${round.food_type}\nكشف حساب: ${person}\n${details}\nالتوصيل والمصاريف: ${money(bill.delivery)}\nالإجمالي المطلوب: ${money(bill.total)}\nUnited We Eat. Divided We Pay.`;
-
+function openWhatsAppMessage(message) {
   window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+}
+
+function formatBillDetails(bill) {
+  const details = bill.items.map(item =>
+    `• ${item.description} × ${item.quantity} — ${item.shared ? 'نصيبي من الصنف المشترك' : 'صنف فردي'}: ${money(item.amount)}`
+  );
+  if (!details.length) details.push('• لا توجد أصناف مسجلة');
+  details.push(`• نصيب التوصيل والمصاريف: ${money(bill.delivery)}`);
+  return details.join('\n');
+}
+
+function shareBill(round, person, bill) {
+  const message = [
+    '🍽️ FORKS UP | HALL NO. 213',
+    `كشف حساب: ${person}`,
+    `الجولة: ${round.food_type}`,
+    round.title ? `تفاصيل الجولة: ${round.title}` : '',
+    '────────────────',
+    'تفاصيل الطلب:',
+    formatBillDetails(bill),
+    '────────────────',
+    `💰 الإجمالي المطلوب: ${money(bill.total)}`,
+    '',
+    'Bite Together. Order Smarter.'
+  ].filter(Boolean).join('\n');
+  openWhatsAppMessage(message);
+}
+
+function shareGroupBill(round, result) {
+  const sections = result.people.map((person, index) => {
+    const bill = result.bills[person];
+    return [
+      `👤 ${index + 1}) ${person}`,
+      formatBillDetails(bill),
+      `الإجمالي: ${money(bill.total)}`
+    ].join('\n');
+  });
+  const message = [
+    '🍽️ FORKS UP | HALL NO. 213',
+    'كشف الحساب الجماعي',
+    `الجولة: ${round.food_type}`,
+    round.title ? `تفاصيل الجولة: ${round.title}` : '',
+    `عدد الموظفين: ${result.people.length}`,
+    '════════════════',
+    ...sections.flatMap(section => [section, '────────────────']),
+    `🧾 إجمالي فاتورة الجولة: ${money(result.grandTotal)}`,
+    '',
+    'Bite Together. Order Smarter.'
+  ].filter(Boolean).join('\n');
+  openWhatsAppMessage(message);
 }
 
 function SharePanel({ round }) {
