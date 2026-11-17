@@ -286,6 +286,16 @@ begin
 end;
 $;
 
+
+-- Publish payment rows for live administrator dashboard refresh.
+do $ begin
+  if exists (select 1 from pg_publication where pubname='supabase_realtime') then
+    if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='round_payments') then
+      alter publication supabase_realtime add table public.round_payments;
+    end if;
+  end if;
+end $;
+
 revoke all on function public.admin_create_order(uuid,text,jsonb) from public;
 revoke all on function public.admin_settle_round(uuid) from public;
 revoke all on function public.admin_restore_backup(jsonb) from public;
