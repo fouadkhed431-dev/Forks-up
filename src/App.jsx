@@ -48,6 +48,7 @@ function App() {
   const [employees, setEmployees] = useState([]);
   const [favorites, setFavorites] = useState([]);
   const [resourceBusy, setResourceBusy] = useState(false);
+  const [roundSearch, setRoundSearch] = useState('');
 
 
   const flash = useCallback(message => {
@@ -752,10 +753,11 @@ function App() {
         {tab === 'history' && <HistoryPanel logs={roundData.logs} />}
 
         <div className="round-switch">
-          <span>الجولات السابقة والحالية</span>
+          <span>أرشيف الجولات السابقة والحالية</span>
+          <input value={roundSearch} onChange={event => setRoundSearch(event.target.value)} placeholder="ابحث بنوع الطعام أو اسم الجولة" aria-label="البحث في أرشيف الجولات" />
           <select value={roundData.id} onChange={event => setActiveId(event.target.value)}>
-            {rounds.map(round => <option key={round.id} value={round.id}>
-              {round.food_type} — {new Date(round.created_at).toLocaleDateString('ar-EG')}
+            {rounds.filter(round => `${round.food_type} ${round.title || ''} ${new Date(round.created_at).toLocaleDateString('ar-EG')}`.toLocaleLowerCase('ar').includes(roundSearch.trim().toLocaleLowerCase('ar'))).map(round => <option key={round.id} value={round.id}>
+              {round.food_type} — {round.title || 'جولة'} — {new Date(round.created_at).toLocaleDateString('ar-EG')}
             </option>)}
           </select>
         </div>
