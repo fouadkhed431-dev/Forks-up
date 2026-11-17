@@ -315,6 +315,28 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [session, roundData?.id, roundData?.deadline, roundData?.status]);
 
+  useEffect(() => {
+    if (!session?.user?.id || !roundData?.orders?.length) return;
+    let active = true;
+    const syncNames = async () => {
+      const names = [...new Set(roundData.orders.map(order => order.employee_name?.trim()).filter(Boolean))];
+      if (!names.length) return;
+      const { data: existing, error: readError } = await supabase.from('employee_profiles')
+        .select('employee_name').in('employee_name', names);
+      if (readError) throw readError;
+      const known = new Set((existing || []).map(row => row.employee_name.trim().toLocaleLowerCase('ar')));
+      const missing = names.filter(name => !known.has(name.toLocaleLowerCase('ar')));
+      if (missing.length) {
+        const { error: insertError } = await supabase.from('employee_profiles')
+          .insert(missing.map(employee_name => ({ created_by: session.user.id, employee_name })));
+        if (insertError && !String(insertError.message || '').toLowerCase().includes('duplicate')) throw insertError;
+        if (active) await refreshDirectory();
+      }
+    };
+    syncNames().catch(report);
+    return () => { active = false; };
+  }, [session?.user?.id, roundData?.orders]);
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -1640,8 +1662,8 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
     </>}
 
     {missingPrices.length === 0 && <div style={{ position: 'absolute', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
-      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person] }))} grandTotal={result.grandTotal} />
-      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person] }]} grandTotal={result.bills[person].total} />)}
+      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person], order: round.orders.find(entry => entry.employee_name === person) }))} grandTotal={result.grandTotal} />
+      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person], order: round.orders.find(entry => entry.employee_name === person) }]} grandTotal={result.bills[person].total} />)}
     </div>}
   </div>;
 }
@@ -1668,6 +1690,8 @@ function InvoiceImageCard({ refCallback, round, title, people, grandTotal }) {
         <span>{item.description} × {item.quantity} <small style={{ color: '#777' }}>({item.shared ? 'مشترك' : 'فردي'})</small></span><strong style={{ whiteSpace: 'nowrap' }}>{money(item.amount)}</strong>
       </div>)}
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', fontSize: '16px' }}><span>نصيب التوصيل والمصاريف</span><strong>{money(person.bill.delivery)}</strong></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', fontSize: '15px', color: '#53645b' }}><span>المدفوع</span><strong>{money(person.order?.amount_paid || 0)}</strong></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', fontSize: '15px', color: '#53645b' }}><span>المتبقي</span><strong>{money(Math.max(0, person.bill.total - Number(person.order?.amount_paid || 0)))}</strong></div>
     </div>)}
     <div style={{ background: '#f5b66b', borderRadius: '18px', padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#26312b' }}>
       <strong style={{ fontSize: '22px' }}>الإجمالي المطلوب</strong><strong style={{ fontSize: '30px' }}>{money(grandTotal)}</strong>
