@@ -1789,6 +1789,7 @@ function SharePanel({ round }) {
   };
 
   const message = `جولة طلب الطعام: ${round.food_type}${round.title ? ` — ${round.title}` : ''}\nسجل طلبك من هنا: ${link}`;
+  const reminderMessage = `⏰ تذكير من Forks Up: استقبال الطلبات لجولة ${round.food_type}${round.title ? ` — ${round.title}` : ''} ${round.deadline ? `سينتهي في ${dateLabel(round.deadline)}` : 'سيغلق قريبًا'}. إذا لم تسجل طلبك بعد، استخدم الرابط: ${link}`;
 
   return <div className="share-layout">
     <div className="panel card share-copy">
@@ -1798,6 +1799,7 @@ function SharePanel({ round }) {
       <div className="url-box" dir="ltr">{link}</div>
       <button className="primary" onClick={copy}>{copied ? '✓ تم النسخ' : 'نسخ الرابط'}</button>
       <a className="secondary link-button" href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer">إرسال الرابط عبر WhatsApp</a>
+      <a className="secondary link-button" href={`https://wa.me/?text=${encodeURIComponent(reminderMessage)}`} target="_blank" rel="noreferrer">إرسال تذكير للموظفين عبر WhatsApp</a>
       <p className="muted">حالة الجولة: {isRoundOpen(round) ? 'تستقبل الطلبات' : 'مغلقة حالياً'}</p>
     </div>
 
