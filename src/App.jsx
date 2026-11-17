@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
 import { QRCodeSVG } from 'qrcode.react';
@@ -8,18 +9,21 @@ const dateLabel = value => value ? new Date(value).toLocaleString('ar-EG', { dat
 const shortTime = value => value ? new Date(value).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '';
 const isRoundOpen = round => round?.status === 'open' && (!round.deadline || new Date(round.deadline).getTime() > Date.now());
 const publicUrl = token => `${window.location.origin}${window.location.pathname}?token=${encodeURIComponent(token)}`;
+
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
   description: item.description.trim(),
   quantity: Math.max(1, Math.min(99, Number(item.quantity) || 1)),
   kind: item.kind === 'shared' ? 'shared' : 'individual',
   participants: item.kind === 'shared' ? [...new Set((item.participants || []).map(name => name.trim()).filter(Boolean))] : []
 }));
+
 const buildFormItems = (items, owner) => toItemsPayload(items.map(item => ({
   ...item,
   participants: item.kind === 'shared'
     ? [owner, ...(item.participantsText || '').split(/[،,]/).map(name => name.trim()).filter(Boolean)]
     : []
 })));
+
 const hasIncompleteSharedItem = items => items.some(item => item.kind === 'shared' && item.participants.length < 2);
 const hasTooManyParticipants = items => items.some(item => item.kind === 'shared' && item.participants.length > 20);
 
@@ -65,20 +69,13 @@ function App() {
 
       setSession(nextSession);
 
-      if (event === 'PASSWORD_RECOVERY') {
-        setRecoveryMode(true);
-      }
-
-      if (event === 'SIGNED_OUT') {
-        setRecoveryMode(false);
-      }
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+      if (event === 'SIGNED_OUT') setRecoveryMode(false);
     });
 
     supabase.auth.getSession().then(({ data, error: sessionError }) => {
       if (!mounted) return;
-
       if (sessionError) console.error(sessionError);
-
       setSession(data?.session || null);
       setAuthReady(true);
     }).catch(err => {
@@ -305,6 +302,49 @@ function App() {
     }
   };
 
+  // إنشاء طلب جديد بواسطة المسؤول
+  const createAdminOrder = async next => {
+    if (!roundData) return false;
+
+    setBusy(true);
+    setError('');
+
+    try {
+      const { error: createError } = await supabase.rpc('admin_create_order', {
+        p_round_id: roundData.id,
+        p_employee_name: next.employee_name,
+        p_items: toItemsPayload(next.items)
+      });
+
+      if (createError) {
+        const message = createError.message || '';
+
+        if (message.includes('DUPLICATE_EMPLOYEE_ORDER')) {
+          throw new Error('يوجد طلب مسجل بهذا الاسم بالفعل في هذه الجولة.');
+        }
+
+        if (message.includes('ROUND_CLOSED')) {
+          throw new Error('الجولة مغلقة أو انتهى موعد استقبال الطلبات.');
+        }
+
+        if (message.includes('SHARED_ITEM_NEEDS_PARTICIPANTS')) {
+          throw new Error('الصنف المشترك يحتاج مشاركين اثنين على الأقل.');
+        }
+
+        throw createError;
+      }
+
+      await loadRound(roundData.id);
+      flash('تم إضافة الشخص والطلب بنجاح');
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteOrder = async order => {
     if (!window.confirm(`حذف طلب ${order.employee_name} بالكامل؟`)) return;
 
@@ -347,6 +387,8 @@ function App() {
 
   if (!session) return <LoginScreen />;
 
+  const participants = roundData ? getParticipants(roundData.orders) : [];
+
   return <div className="app-shell">
     <header className="topbar">
       <Logo />
@@ -373,6 +415,8 @@ function App() {
 
       <CreateRoundDialog onCreate={createRound} busy={busy} />
 
+      <ParticipantsDialog participants={participants} />
+
       {!roundData ? <div className="empty card">
         <div className="empty-icon">🍽️</div>
         <h2>لسه مفيش جولات</h2>
@@ -392,7 +436,11 @@ function App() {
 
         <div className="summary-grid">
           <Stat label="عدد الطلبات" value={roundData.orders.length} />
-          <Stat label="عدد المشاركين" value={getParticipants(roundData.orders).length} />
+          <Stat
+            label="عدد المشاركين"
+            value={participants.length}
+            onClick={() => document.getElementById('participants-dialog')?.showModal()}
+          />
           <Stat label="موعد الإغلاق" value={roundData.deadline ? dateLabel(roundData.deadline) : 'مفتوحة'} />
         </div>
 
@@ -408,6 +456,7 @@ function App() {
           busy={busy}
           onSave={saveOrder}
           onDelete={deleteOrder}
+          onCreate={createAdminOrder}
           onToggle={() => updateRound({ status: roundData.status === 'open' ? 'closed' : 'open' })}
         />}
 
@@ -549,25 +598,11 @@ function LoginScreen() {
       <p className="muted">سجّل الدخول لإدارة جولات الطعام والطلبات.</p>
 
       <label>البريد الإلكتروني
-        <input
-          type="email"
-          required
-          autoComplete="username"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="admin@example.com"
-        />
+        <input type="email" required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} placeholder="admin@example.com" />
       </label>
 
       <label>كلمة المرور
-        <input
-          type="password"
-          required
-          autoComplete="current-password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="••••••••"
-        />
+        <input type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
       </label>
 
       {error && <div className="inline-error">{error}</div>}
@@ -577,10 +612,7 @@ function LoginScreen() {
         {busy ? 'جارٍ التنفيذ...' : 'تسجيل الدخول'}
       </button>
 
-      <button type="button" className="text-btn" disabled={busy} onClick={recover}>
-        نسيت كلمة المرور؟
-      </button>
-
+      <button type="button" className="text-btn" disabled={busy} onClick={recover}>نسيت كلمة المرور؟</button>
       <small className="muted">حساب المسؤول يُنشأ من لوحة Supabase، ولا يوجد تسجيل مفتوح للموظفين.</small>
     </form>
   </div>;
@@ -628,46 +660,91 @@ function ResetPasswordScreen({ onDone }) {
 
       {success ? <>
         <div className="success-message">تم تحديث كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.</div>
-        <button type="button" className="primary full" onClick={onDone}>
-          العودة إلى تسجيل الدخول
-        </button>
+        <button type="button" className="primary full" onClick={onDone}>العودة إلى تسجيل الدخول</button>
       </> : <>
         <p className="muted">اختر كلمة مرور جديدة لا تقل عن 8 أحرف.</p>
 
         <label>كلمة المرور الجديدة
-          <input
-            type="password"
-            required
-            minLength="8"
-            autoComplete="new-password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-          />
+          <input type="password" required minLength="8" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} />
         </label>
 
         <label>تأكيد كلمة المرور
-          <input
-            type="password"
-            required
-            minLength="8"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={e => setConfirm(e.target.value)}
-          />
+          <input type="password" required minLength="8" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} />
         </label>
 
         {error && <div className="inline-error">{error}</div>}
-
-        <button className="primary full" disabled={busy}>
-          {busy ? 'جارٍ الحفظ...' : 'حفظ كلمة المرور الجديدة'}
-        </button>
+        <button className="primary full" disabled={busy}>{busy ? 'جارٍ الحفظ...' : 'حفظ كلمة المرور الجديدة'}</button>
       </>}
     </form>
   </div>;
 }
 
-function Stat({ label, value }) {
+// بطاقة إحصائية قابلة للضغط عند وجود onClick
+function Stat({ label, value, onClick }) {
+  if (onClick) {
+    return <button
+      type="button"
+      className="stat card"
+      onClick={onClick}
+      style={{ cursor: 'pointer', textAlign: 'inherit', font: 'inherit', width: '100%' }}
+      title="اضغط لعرض أسماء المشاركين"
+    >
+      <span>{label}</span>
+      <b>{value}</b>
+      <small style={{ display: 'block', marginTop: 5, opacity: 0.7 }}>اضغط لعرض الأسماء</small>
+    </button>;
+  }
+
   return <div className="stat card"><span>{label}</span><b>{value}</b></div>;
+}
+
+// نافذة عرض أسماء المشاركين
+function ParticipantsDialog({ participants }) {
+  return <dialog id="participants-dialog" className="dialog card">
+    <div className="modal-head">
+      <div>
+        <h2>المشاركون في الجولة</h2>
+        <small className="muted">إجمالي المشاركين: {participants.length}</small>
+      </div>
+      <button type="button" className="icon-btn" onClick={() => document.getElementById('participants-dialog')?.close()}>×</button>
+    </div>
+
+    {!participants.length ? (
+      <div className="empty-inline">لا يوجد مشاركون حتى الآن.</div>
+    ) : (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16 }}>
+        {participants.map((person, index) => (
+          <div key={person} style={{
+            padding: '12px',
+            borderRadius: 12,
+            background: 'var(--cream, #f7f3e9)',
+            border: '1px solid #e6dfd0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9
+          }}>
+            <span style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#174b3b',
+              color: '#fff',
+              flexShrink: 0,
+              fontSize: 13
+            }}>{index + 1}</span>
+            <b>{person}</b>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <div className="modal-actions">
+      <button type="button" className="primary" onClick={() => document.getElementById('participants-dialog')?.close()}>إغلاق</button>
+    </div>
+  </dialog>;
 }
 
 function CreateRoundDialog({ onCreate, busy }) {
@@ -719,6 +796,171 @@ function CreateRoundDialog({ onCreate, busy }) {
       <div className="modal-actions">
         <button type="button" className="secondary" onClick={() => document.getElementById('create-round')?.close()}>إلغاء</button>
         <button className="primary" disabled={busy}>إنشاء الجولة</button>
+      </div>
+    </form>
+  </dialog>;
+}
+
+// نافذة إضافة شخص وطلبه مباشرة بواسطة المسؤول
+function AdminCreateOrderDialog({ round, busy, onCreate }) {
+  const emptyItem = () => ({
+    key: crypto.randomUUID(),
+    description: '',
+    quantity: 1,
+    kind: 'individual',
+    participantsText: ''
+  });
+
+  const [name, setName] = useState('');
+  const [items, setItems] = useState([emptyItem()]);
+  const [localError, setLocalError] = useState('');
+
+  const patchItem = (key, patch) => {
+    setItems(old => old.map(item => item.key === key ? { ...item, ...patch } : item));
+  };
+
+  const reset = () => {
+    setName('');
+    setItems([emptyItem()]);
+    setLocalError('');
+  };
+
+  const submit = async event => {
+    event.preventDefault();
+    setLocalError('');
+
+    const cleanName = name.trim();
+
+    if (cleanName.length < 2) {
+      setLocalError('اكتب اسم الشخص بشكل صحيح.');
+      return;
+    }
+
+    const payload = buildFormItems(items, cleanName);
+
+    if (!payload.length) {
+      setLocalError('أضف صنفاً واحداً على الأقل.');
+      return;
+    }
+
+    if (hasIncompleteSharedItem(payload)) {
+      setLocalError('الصنف المشترك يحتاج اسم شخص آخر على الأقل غير صاحب الطلب.');
+      return;
+    }
+
+    if (hasTooManyParticipants(payload)) {
+      setLocalError('الحد الأقصى للمشاركين في الصنف الواحد هو 20 شخصاً.');
+      return;
+    }
+
+    const success = await onCreate({
+      employee_name: cleanName,
+      items: payload
+    });
+
+    if (success) {
+      reset();
+      document.getElementById('admin-create-order')?.close();
+    }
+  };
+
+  return <dialog id="admin-create-order" className="dialog card">
+    <form onSubmit={submit}>
+      <div className="modal-head">
+        <div>
+          <h2>إضافة شخص وطلبه</h2>
+          <small className="muted">{round.food_type} · تسجيل مباشر بواسطة المسؤول</small>
+        </div>
+        <button type="button" className="icon-btn" onClick={() => document.getElementById('admin-create-order')?.close()}>×</button>
+      </div>
+
+      <label>اسم الشخص</label>
+      <input
+        required
+        minLength="2"
+        maxLength="100"
+        value={name}
+        onChange={e => setName(e.target.value)}
+        placeholder="اكتب اسم الشخص"
+      />
+
+      <div className="form-divider" />
+      <div className="items-title">
+        <b>الأصناف المطلوبة</b>
+        <small>أضف أصناف هذا الشخص</small>
+      </div>
+
+      {items.map((item, index) => (
+        <div className="guest-item" key={item.key}>
+          <div className="item-top">
+            <b>صنف {index + 1}</b>
+            {items.length > 1 && (
+              <button type="button" className="remove-link" onClick={() => setItems(old => old.filter(x => x.key !== item.key))}>حذف</button>
+            )}
+          </div>
+
+          <input
+            required
+            maxLength="180"
+            value={item.description}
+            onChange={e => patchItem(item.key, { description: e.target.value })}
+            placeholder="مثلاً: تشيز برجر دابل، بطاطس..."
+          />
+
+          <div className="item-controls">
+            <label>الكمية
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={item.quantity}
+                onChange={e => patchItem(item.key, { quantity: e.target.value })}
+              />
+            </label>
+
+            <label>نوع الصنف
+              <select
+                value={item.kind}
+                onChange={e => patchItem(item.key, { kind: e.target.value })}
+              >
+                <option value="individual">فردي — على صاحب الطلب</option>
+                <option value="shared">مشترك — نتقاسمه بالتساوي</option>
+              </select>
+            </label>
+          </div>
+
+          {item.kind === 'shared' && (
+            <label>أسماء المشاركين معه
+              <input
+                value={item.participantsText}
+                onChange={e => patchItem(item.key, { participantsText: e.target.value })}
+                placeholder="مثلاً: أحمد، محمد"
+              />
+              <small className="hint">اسم صاحب الطلب سيُضاف تلقائياً.</small>
+            </label>
+          )}
+        </div>
+      ))}
+
+      <button
+        type="button"
+        className="add-item"
+        onClick={() => setItems(old => [...old, emptyItem()])}
+      >＋ إضافة صنف آخر</button>
+
+      {localError && <div className="inline-error">{localError}</div>}
+
+      <div className="modal-actions">
+        <button
+          type="button"
+          className="secondary"
+          disabled={busy}
+          onClick={() => document.getElementById('admin-create-order')?.close()}
+        >إلغاء</button>
+
+        <button className="primary" disabled={busy}>
+          {busy ? 'جارٍ تسجيل الطلب...' : 'حفظ الشخص والطلب'}
+        </button>
       </div>
     </form>
   </dialog>;
@@ -847,7 +1089,6 @@ function GuestPage({ token, onBack }) {
         <p className="muted">{round.title || 'سجّل طلبك، وحدد الأصناف الفردية والمشتركة.'}</p>
 
         {round.deadline && <p className="deadline-note">استقبال الطلبات حتى: {dateLabel(round.deadline)}</p>}
-
         {menuUrl && <a className="menu-link" href={menuUrl} target="_blank" rel="noreferrer">📎 عرض منيو المطعم</a>}
 
         <form onSubmit={submit}>
@@ -886,10 +1127,7 @@ function GuestPage({ token, onBack }) {
           <button type="button" className="add-item" onClick={() => setItems(old => [...old, { key: crypto.randomUUID(), description: '', quantity: 1, kind: 'individual', participantsText: '' }])}>＋ إضافة صنف آخر</button>
 
           {error && <div className="inline-error">{error}</div>}
-
-          <button className="primary submit-order" disabled={busy}>
-            {busy ? 'جارٍ إرسال الطلب...' : 'إرسال الطلب'}
-          </button>
+          <button className="primary submit-order" disabled={busy}>{busy ? 'جارٍ إرسال الطلب...' : 'إرسال الطلب'}</button>
         </form>
       </>}
     </div>
@@ -899,7 +1137,7 @@ function GuestPage({ token, onBack }) {
   </div>;
 }
 
-function OrdersPanel({ round, busy, onSave, onDelete, onToggle }) {
+function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
   const canEdit = isRoundOpen(round);
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
@@ -914,8 +1152,20 @@ function OrdersPanel({ round, busy, onSave, onDelete, onToggle }) {
       </button>
     </div>
 
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, margin: '14px 0 18px' }}>
+      <button
+        type="button"
+        className="primary"
+        disabled={busy || !canEdit}
+        onClick={() => document.getElementById('admin-create-order')?.showModal()}
+      >＋ إضافة شخص وطلبه</button>
+      {!canEdit && <small className="hint">إضافة الطلبات متاحة عند فتح الجولة فقط.</small>}
+    </div>
+
+    <AdminCreateOrderDialog round={round} busy={busy} onCreate={onCreate} />
+
     {!round.orders.length
-      ? <div className="empty-inline">لا توجد طلبات حتى الآن. شارك QR Code ليبدأ الموظفون التسجيل.</div>
+      ? <div className="empty-inline">لا توجد طلبات حتى الآن. يمكنك إضافة طلب بنفسك أو مشاركة QR Code ليبدأ الموظفون التسجيل.</div>
       : <div className="order-list">
           {round.orders.map(order => <OrderCard
             key={order.id}
@@ -983,12 +1233,10 @@ function EditOrder({ order, busy, onCancel, onSave }) {
     const clean = buildFormItems(items, name.trim());
 
     if (!clean.length) return;
-
     if (hasIncompleteSharedItem(clean)) {
       window.alert('الصنف المشترك يحتاج اسم شخص آخر على الأقل غير صاحب الطلب.');
       return;
     }
-
     if (hasTooManyParticipants(clean)) {
       window.alert('الحد الأقصى للمشاركين في الصنف الواحد هو 20 شخصاً.');
       return;
@@ -1025,6 +1273,7 @@ function InvoicePanel({ round, busy, onSave }) {
   const lines = useMemo(() => aggregateItems(round.orders), [round.orders]);
   const imageRefs = useRef({});
   const [exporting, setExporting] = useState('');
+
   const exportInvoiceImage = async (key, fileName, share = false) => {
     const node = imageRefs.current[key];
     if (!node || exporting) return;
@@ -1034,6 +1283,7 @@ function InvoicePanel({ round, busy, onSave }) {
       const response = await fetch(dataUrl);
       const blob = await response.blob();
       const file = new File([blob], fileName, { type: 'image/png' });
+
       if (share && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
         await navigator.share({ files: [file], title: 'Forks Up', text: 'كشف حساب من Forks Up · Hall 213' });
       } else {
@@ -1048,8 +1298,11 @@ function InvoicePanel({ round, busy, onSave }) {
     } catch (err) {
       console.error(err);
       window.alert(err?.name === 'AbortError' ? 'تم إلغاء المشاركة.' : 'تعذر إنشاء صورة الكشف. حاول مرة أخرى أو استخدم إرسال النص.');
-    } finally { setExporting(''); }
+    } finally {
+      setExporting('');
+    }
   };
+
   const [prices, setPrices] = useState(round.prices || {});
   const [delivery, setDelivery] = useState(round.delivery_fee || 0);
 
@@ -1096,14 +1349,14 @@ function InvoicePanel({ round, busy, onSave }) {
 
       {missingPrices.length === 0 && <div className="bill-list">
         <div className="bill-title"><h3>كشوف الحسابات</h3><b>إجمالي الفاتورة: {money(result.grandTotal)}</b></div>
-<div className="bill-sharing-options">
-  <p className="muted">اختر طريقة إرسال الكشف عبر WhatsApp:</p>
-  <div className="invoice-action-row">
-  <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png', true)}>{exporting === 'group' ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف الجماعي'}</button>
-  <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png')}>تنزيل صورة الكشف</button>
-  <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال النص الجماعي عبر WhatsApp ↗</button>
-</div>
-</div>
+        <div className="bill-sharing-options">
+          <p className="muted">اختر طريقة إرسال الكشف عبر WhatsApp:</p>
+          <div className="invoice-action-row">
+            <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png', true)}>{exporting === 'group' ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف الجماعي'}</button>
+            <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png')}>تنزيل صورة الكشف</button>
+            <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال النص الجماعي عبر WhatsApp ↗</button>
+          </div>
+        </div>
 
         {result.people.map(person => <div className="bill-person" key={person}>
           <div className="bill-person-head">
@@ -1120,13 +1373,14 @@ function InvoicePanel({ round, busy, onSave }) {
           </div>
 
           <div className="invoice-action-row">
-  <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
-  <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
-  <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال النص عبر WhatsApp ↗</button>
-</div>
+            <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
+            <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
+            <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال النص عبر WhatsApp ↗</button>
+          </div>
         </div>)}
       </div>}
     </>}
+
     {missingPrices.length === 0 && <div style={{ position: 'absolute', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
       <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person] }))} grandTotal={result.grandTotal} />
       {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person] }]} grandTotal={result.bills[person].total} />)}
@@ -1251,11 +1505,16 @@ function SharePanel({ round }) {
 }
 
 function HistoryPanel({ logs }) {
+  const actionLabel = action =>
+    action === 'order_deleted' ? 'حذف طلب' :
+    action === 'order_created' ? 'إضافة طلب بواسطة المسؤول' :
+    'تعديل طلب';
+
   return <div className="panel card">
     <div className="panel-title">
       <div>
         <h3>سجل التعديلات</h3>
-        <p className="muted">يسجل النظام عمليات تعديل الطلبات وحذفها ووقت تنفيذها.</p>
+        <p className="muted">يسجل النظام عمليات إضافة الطلبات وتعديلها وحذفها ووقت تنفيذها.</p>
       </div>
     </div>
 
@@ -1263,8 +1522,8 @@ function HistoryPanel({ logs }) {
       ? <div className="empty-inline">لا توجد تعديلات مسجلة لهذه الجولة حتى الآن.</div>
       : <div className="history-list">
           {logs.map(log => <div className="history-row" key={log.id}>
-            <b>{log.action === 'order_deleted' ? 'حذف طلب' : 'تعديل طلب'}</b>
-            <span>{log.before_data?.employee_name || 'موظف'}</span>
+            <b>{actionLabel(log.action)}</b>
+            <span>{log.after_data?.employee_name || log.before_data?.employee_name || 'موظف'}</span>
             <time>{dateLabel(log.created_at)}</time>
           </div>)}
         </div>}
