@@ -278,6 +278,40 @@ function App() {
     }
   };
 
+  const deleteRound = async () => {
+    if (!roundData) return;
+    const title = roundData.title || roundData.food_type || 'هذه الجولة';
+    if (!window.confirm(`حذف "${title}" وجميع الطلبات والأسعار وسجل التعديلات المرتبط بها نهائيًا؟`)) return;
+    if (!window.confirm('تأكيد أخير: لا يمكن التراجع عن حذف الجولة. هل تريد المتابعة؟')) return;
+
+    setBusy(true);
+    setError('');
+    try {
+      if (roundData.menu_path) {
+        const { error: storageError } = await supabase.storage
+          .from('round-menus')
+          .remove([roundData.menu_path]);
+        if (storageError) console.warn('تعذر حذف ملف المنيو:', storageError);
+      }
+
+      const { error: deleteError } = await supabase
+        .from('rounds')
+        .delete()
+        .eq('id', roundData.id)
+        .eq('created_by', session.user.id);
+      if (deleteError) throw deleteError;
+
+      setRoundData(null);
+      setTab('orders');
+      await loadRounds();
+      flash('تم حذف الجولة وجميع بياناتها المرتبطة');
+    } catch (err) {
+      report(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveOrder = async (order, next) => {
     setBusy(true);
     setError('');
@@ -429,9 +463,12 @@ function App() {
             <h2>{roundData.food_type}</h2>
             <p className="muted">{roundData.title || 'جولة طلب الطعام'} · {dateLabel(roundData.created_at)}</p>
           </div>
-          <span className={`status ${isRoundOpen(roundData) ? 'open' : 'closed'}`}>
-            {isRoundOpen(roundData) ? 'مفتوحة للطلبات' : 'مغلقة'}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className={`status ${isRoundOpen(roundData) ? 'open' : 'closed'}`}>
+              {isRoundOpen(roundData) ? 'مفتوحة للطلبات' : 'مغلقة'}
+            </span>
+            <button type="button" className="text-btn danger" disabled={busy} onClick={deleteRound}>حذف الجولة</button>
+          </div>
         </div>
 
         <div className="summary-grid">
@@ -1320,6 +1357,9 @@ function InvoicePanel({ round, busy, onSave }) {
   );
 
   return <div className="panel card">
+    {!isRoundOpen(round) && <div className="deadline-note" style={{ marginBottom: 14 }}>
+      تم إغلاق استقبال الطلبات. يمكنك الآن، بصفتك المسؤول، استكمال إدخال الأسعار وحفظ الفواتير وإرسال الحسابات الفردية والجماعية دون إعادة فتح الجولة.
+    </div>}
     <div className="panel-title">
       <div>
         <h3>إدخال الفاتورة</h3>
