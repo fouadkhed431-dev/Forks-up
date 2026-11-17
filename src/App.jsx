@@ -48,9 +48,6 @@ function App() {
   const [resourceBusy, setResourceBusy] = useState(false);
   const [roundSearch, setRoundSearch] = useState('');
 
-  const employeeNames = useMemo(() => [...new Set(
-    (roundData?.orders || []).map(order => order.employee_name?.trim()).filter(Boolean)
-  )], [roundData?.orders]);
 
 
   const flash = useCallback(message => {
