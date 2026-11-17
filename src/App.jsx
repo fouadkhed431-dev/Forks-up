@@ -1400,13 +1400,14 @@ function GuestPage({ token, onBack }) {
 
 function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDelete, onCreate, onToggle }) {
   const canEdit = round.settlement_status !== 'settled';
+  const canAdd = isRoundOpen(round);
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
   return <div className="panel card">
     <div className="panel-title">
       <div>
         <h3>طلبات الموظفين</h3>
-        <p className="muted">{canEdit ? 'يمكنك تعديل أي طلب قبل إغلاق الجولة.' : expired ? 'انتهى موعد الجولة؛ التعديل والحذف متوقفان.' : 'تم إغلاق الجولة؛ التعديل والحذف متوقفان.'}</p>
+        <p className="muted">{canEdit ? (canAdd ? 'يمكنك تعديل الطلبات وإضافة طلبات جديدة قبل الإغلاق.' : 'استقبال الطلبات مغلق؛ يمكنك تصحيح الطلبات حتى اعتماد التسوية المالية.') : 'تم اعتماد التسوية؛ التعديلات المالية والطلبات مقفلة.'}</p>
       </div>
       <button className="secondary small-btn" disabled={busy || expired || round.settlement_status === 'settled'} onClick={onToggle}>
         {expired ? 'انتهى الموعد' : round.status === 'open' ? 'إغلاق الجولة' : 'إعادة فتح الجولة'}
@@ -1417,10 +1418,10 @@ function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDe
       <button
         type="button"
         className="primary"
-        disabled={busy || !canEdit}
+        disabled={busy || !canAdd || !canEdit}
         onClick={() => document.getElementById('admin-create-order')?.showModal()}
       >＋ إضافة شخص وطلبه</button>
-      {!canEdit && <small className="hint">إضافة الطلبات متاحة عند فتح الجولة فقط.</small>}
+      {!canAdd && <small className="hint">إضافة طلبات جديدة متاحة عند فتح الجولة فقط؛ يمكن للمسؤول تصحيح الطلبات الحالية قبل التسوية.</small>}
     </div>
 
     <AdminCreateOrderDialog round={round} employees={employees} favorites={favorites} busy={busy} onCreate={onCreate} />
