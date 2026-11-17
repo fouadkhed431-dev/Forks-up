@@ -19,8 +19,7 @@ create table if not exists public.employee_profiles (
   phone text,
   notes text,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique(created_by, lower(trim(employee_name)))
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.favorite_items (
@@ -28,14 +27,13 @@ create table if not exists public.favorite_items (
   created_by uuid not null references auth.users(id) on delete cascade,
   item_name text not null check (length(trim(item_name)) between 1 and 180),
   restaurant_name text not null default '',
-  created_at timestamptz not null default now(),
-  unique(created_by, lower(trim(item_name)), lower(trim(restaurant_name)))
+  created_at timestamptz not null default now()
 );
 
-create index if not exists employee_profiles_owner_name_idx
-  on public.employee_profiles(created_by, lower(employee_name));
-create index if not exists favorite_items_owner_name_idx
-  on public.favorite_items(created_by, lower(item_name));
+create unique index if not exists employee_profiles_owner_name_uidx
+  on public.employee_profiles(created_by, lower(trim(employee_name)));
+create unique index if not exists favorite_items_owner_item_restaurant_uidx
+  on public.favorite_items(created_by, lower(trim(item_name)), lower(trim(restaurant_name)));
 
 alter table public.employee_profiles enable row level security;
 alter table public.favorite_items enable row level security;
