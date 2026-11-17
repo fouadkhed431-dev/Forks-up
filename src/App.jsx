@@ -671,6 +671,8 @@ function App() {
 
         {tab === 'orders' && <OrdersPanel
           round={roundData}
+          employees={employees}
+          favorites={favorites}
           busy={busy}
           onSave={saveOrder}
           onDelete={deleteOrder}
@@ -1031,7 +1033,7 @@ function CreateRoundDialog({ onCreate, busy }) {
 }
 
 // نافذة إضافة شخص وطلبه مباشرة بواسطة المسؤول
-function AdminCreateOrderDialog({ round, busy, onCreate }) {
+function AdminCreateOrderDialog({ round, employees = [], favorites = [], busy, onCreate }) {
   const emptyItem = () => ({
     key: crypto.randomUUID(),
     description: '',
@@ -1108,10 +1110,14 @@ function AdminCreateOrderDialog({ round, busy, onCreate }) {
         required
         minLength="2"
         maxLength="100"
+        list="forks-up-employee-list"
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="اكتب اسم الشخص"
       />
+      <datalist id="forks-up-employee-list">
+        {employees.map(person => <option key={person.id} value={person.employee_name} />)}
+      </datalist>
 
       <div className="form-divider" />
       <div className="items-title">
@@ -1131,10 +1137,14 @@ function AdminCreateOrderDialog({ round, busy, onCreate }) {
           <input
             required
             maxLength="180"
+            list="forks-up-favorite-items"
             value={item.description}
             onChange={e => patchItem(item.key, { description: e.target.value })}
             placeholder="مثلاً: تشيز برجر دابل، بطاطس..."
           />
+          <datalist id="forks-up-favorite-items">
+            {favorites.map(favorite => <option key={favorite.id} value={favorite.item_name}>{favorite.restaurant_name}</option>)}
+          </datalist>
 
           <div className="item-controls">
             <label>الكمية
@@ -1366,7 +1376,7 @@ function GuestPage({ token, onBack }) {
   </div>;
 }
 
-function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
+function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDelete, onCreate, onToggle }) {
   const canEdit = isRoundOpen(round);
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
@@ -1391,7 +1401,7 @@ function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
       {!canEdit && <small className="hint">إضافة الطلبات متاحة عند فتح الجولة فقط.</small>}
     </div>
 
-    <AdminCreateOrderDialog round={round} busy={busy} onCreate={onCreate} />
+    <AdminCreateOrderDialog round={round} employees={employees} favorites={favorites} busy={busy} onCreate={onCreate} />
 
     {!round.orders.length
       ? <div className="empty-inline">لا توجد طلبات حتى الآن. يمكنك إضافة طلب بنفسك أو مشاركة QR Code ليبدأ الموظفون التسجيل.</div>
