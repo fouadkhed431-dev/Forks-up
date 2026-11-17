@@ -379,6 +379,35 @@ function App() {
     }
   };
 
+  const updatePayment = async (person, total, amountPaid) => {
+    const paid = Math.max(0, Math.min(Number(total) || 0, Number(amountPaid) || 0));
+    const payment_status = paid <= 0 ? 'unpaid' : paid + 0.001 >= Number(total) ? 'paid' : 'partial';
+    const { error: paymentError } = await supabase
+      .from('orders')
+      .update({ amount_paid: paid, payment_status })
+      .eq('round_id', roundData.id)
+      .eq('employee_name', person);
+    if (paymentError) throw paymentError;
+    await loadRound(roundData.id);
+    flash('تم تحديث حالة الدفع');
+  };
+
+  const settleRound = async () => {
+    if (!roundData || roundData.status !== 'closed') return;
+    if (!window.confirm('اعتماد التسوية المالية وإقفال الجولة نهائيًا؟')) return;
+    setBusy(true);
+    try {
+      const { error: settleError } = await supabase.rpc('admin_settle_round', { p_round_id: roundData.id });
+      if (settleError) throw settleError;
+      await loadRound(roundData.id);
+      flash('تم اعتماد التسوية المالية');
+    } catch (err) {
+      report(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteOrder = async order => {
     if (!window.confirm(`حذف طلب ${order.employee_name} بالكامل؟`)) return;
 
@@ -500,6 +529,8 @@ function App() {
         {tab === 'invoice' && <InvoicePanel
           round={roundData}
           busy={busy}
+          onPaymentUpdate={updatePayment}
+          onSettle={settleRound}
           onSave={async (prices, delivery) => {
             setBusy(true);
             setError('');
@@ -1306,7 +1337,7 @@ function EditOrder({ order, busy, onCancel, onSave }) {
   </form>;
 }
 
-function InvoicePanel({ round, busy, onSave }) {
+function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
   const lines = useMemo(() => aggregateItems(round.orders), [round.orders]);
   const imageRefs = useRef({});
   const [exporting, setExporting] = useState('');
@@ -1398,7 +1429,12 @@ function InvoicePanel({ round, busy, onSave }) {
           </div>
         </div>
 
-        {result.people.map(person => <div className="bill-person" key={person}>
+        {result.people.map(person => {
+          const order = round.orders.find(entry => entry.employee_name === person);
+          const paid = Number(order?.amount_paid || 0);
+          const total = Number(result.bills[person].total || 0);
+          const paymentState = paid <= 0 ? 'لم يدفع' : paid + 0.001 >= total ? 'دفع بالكامل' : 'دفع جزئيًا';
+          return <div className="bill-person" key={person}>
           <div className="bill-person-head">
             <b>{person}</b>
             <strong>{money(result.bills[person].total)}</strong>
@@ -1412,12 +1448,23 @@ function InvoicePanel({ round, busy, onSave }) {
             <div><span>نصيب التوصيل والمصاريف</span><span>{money(result.bills[person].delivery)}</span></div>
           </div>
 
+          <div className="payment-entry" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '12px 0' }}>
+            <span className="hint">حالة الدفع: <b>{paymentState}</b></span>
+            <span className="hint">المدفوع: {money(paid)} · المتبقي: {money(Math.max(0, total - paid))}</span>
+            <input aria-label={`المبلغ المدفوع من ${person}`} type="number" min="0" max={total} step="0.01" defaultValue={paid} key={`${person}-${paid}`} id={`paid-${safeFileName(person)}`} style={{ width: 112 }} />
+            <button type="button" className="secondary small-btn" disabled={busy} onClick={() => onPaymentUpdate(person, total, document.getElementById(`paid-${safeFileName(person)}`)?.value)}>حفظ الدفع</button>
+          </div>
           <div className="invoice-action-row">
             <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
             <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
             <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال النص عبر WhatsApp ↗</button>
           </div>
-        </div>)}
+        </div>;
+        })}
+      </div>}
+      {round.status === 'closed' && <div className="settlement-row" style={{ marginTop: 18, padding: 16, borderRadius: 14, background: '#f3eee2' }}>
+        <b>التسوية المالية: {round.settlement_status === 'settled' ? 'معتمدة ومقفلة' : 'بانتظار الاعتماد'}</b>
+        {round.settlement_status !== 'settled' && <button type="button" className="primary small-btn" disabled={busy || missingPrices.length > 0} onClick={onSettle}>اعتماد التسوية وإقفال الجولة ماليًا</button>}
       </div>}
     </>}
 
@@ -1434,10 +1481,13 @@ function safeFileName(value) {
 
 function InvoiceImageCard({ refCallback, round, title, people, grandTotal }) {
   return <div ref={refCallback} dir="rtl" style={{ width: '820px', boxSizing: 'border-box', padding: '42px', background: '#f7f3e9', color: '#252b28', fontFamily: 'Arial, sans-serif' }}>
-    <div style={{ background: '#174b3b', color: '#fffaf0', borderRadius: '22px', padding: '30px 34px', marginBottom: '24px' }}>
+    <div style={{ background: '#174b3b', color: '#fffaf0', borderRadius: '22px', padding: '26px 34px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '22px' }}>
+      <img src="/forks-up-192.png" alt="Forks Up" crossOrigin="anonymous" style={{ width: '116px', height: '116px', objectFit: 'contain', borderRadius: '16px', background: '#f7f3e9', flexShrink: 0 }} />
+      <div>
       <div style={{ fontSize: '15px', letterSpacing: '2px', color: '#f5b66b', fontWeight: 700 }}>FORKS UP · HALL NO. 213</div>
       <div style={{ fontSize: '34px', fontWeight: 800, marginTop: '12px' }}>{title}</div>
       <div style={{ fontSize: '18px', marginTop: '10px', opacity: .9 }}>{round.food_type}{round.title ? ` · ${round.title}` : ''}</div>
+      </div>
     </div>
     {people.map(person => <div key={person.name} style={{ background: '#fffdf7', border: '1px solid #e6dfd0', borderRadius: '18px', padding: '24px', marginBottom: '18px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e9e1d2', paddingBottom: '14px', marginBottom: '14px' }}>
