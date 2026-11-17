@@ -1584,6 +1584,9 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
     prices[line.key] === '' ||
     !Number.isFinite(Number(prices[line.key]))
   );
+  const totalPaid = result.people.reduce((sum, person) => sum + Number(round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0), 0);
+  const totalRemaining = Math.max(0, result.grandTotal - totalPaid);
+  const allPaid = result.people.length > 0 && totalRemaining < 0.01;
 
   return <div className="panel card">
     {!isRoundOpen(round) && <div className="deadline-note" style={{ marginBottom: 14 }}>
@@ -1618,6 +1621,10 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
 
       {missingPrices.length === 0 && <div className="bill-list">
         <div className="bill-title"><h3>كشوف الحسابات</h3><b>إجمالي الفاتورة: {money(result.grandTotal)}</b></div>
+        <div className="settlement-summary" style={{ display: 'flex', flexWrap: 'wrap', gap: 12, margin: '10px 0 16px' }}>
+          <span>المحصل: <b>{money(totalPaid)}</b></span>
+          <span>المتبقي: <b>{money(totalRemaining)}</b></span>
+        </div>
         <div className="bill-sharing-options">
           <p className="muted">اختر طريقة إرسال الكشف عبر WhatsApp:</p>
           <div className="invoice-action-row">
@@ -1662,7 +1669,10 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
       </div>}
       {round.status === 'closed' && <div className="settlement-row" style={{ marginTop: 18, padding: 16, borderRadius: 14, background: '#f3eee2' }}>
         <b>التسوية المالية: {round.settlement_status === 'settled' ? 'معتمدة ومقفلة' : 'بانتظار الاعتماد'}</b>
-        {round.settlement_status !== 'settled' && <button type="button" className="primary small-btn" disabled={busy || missingPrices.length > 0} onClick={onSettle}>اعتماد التسوية وإقفال الجولة ماليًا</button>}
+        {round.settlement_status !== 'settled' && <>
+          {!allPaid && <p className="hint">سجّل تحصيل المبالغ بالكامل قبل اعتماد التسوية. المتبقي حاليًا: {money(totalRemaining)}</p>}
+          <button type="button" className="primary small-btn" disabled={busy || missingPrices.length > 0 || !allPaid} onClick={onSettle}>اعتماد التسوية وإقفال الجولة ماليًا</button>
+        </>}
       </div>}
     </>}
 
