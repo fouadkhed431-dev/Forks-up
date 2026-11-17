@@ -28,7 +28,7 @@ const hasIncompleteSharedItem = items => items.some(item => item.kind === 'share
 const hasTooManyParticipants = items => items.some(item => item.kind === 'shared' && item.participants.length > 20);
 
 function Logo() {
-  return <div className="brand"><img src="/forks-up.svg" alt="Forks Up"/><div><b>Forks Up</b><small>United We Eat. Divided We Pay.</small></div></div>;
+  return <div className="brand"><img src="/forks-up-512.png" alt="Forks Up"/><div><b>Forks Up</b><small>United We Eat. Divided We Pay.</small></div></div>;
 }
 
 function App() {
