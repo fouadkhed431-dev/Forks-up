@@ -1,5 +1,5 @@
-
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toPng } from 'html-to-image';
 import { QRCodeSVG } from 'qrcode.react';
 import { isConfigured, supabase } from './lib/supabase.js';
 import { aggregateItems, calculateBills, getParticipants, money } from './lib/billing.js';
@@ -1023,6 +1023,33 @@ function EditOrder({ order, busy, onCancel, onSave }) {
 
 function InvoicePanel({ round, busy, onSave }) {
   const lines = useMemo(() => aggregateItems(round.orders), [round.orders]);
+  const imageRefs = useRef({});
+  const [exporting, setExporting] = useState('');
+  const exportInvoiceImage = async (key, fileName, share = false) => {
+    const node = imageRefs.current[key];
+    if (!node || exporting) return;
+    setExporting(key);
+    try {
+      const dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#f7f3e9', cacheBust: true });
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], fileName, { type: 'image/png' });
+      if (share && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+        await navigator.share({ files: [file], title: 'Forks Up', text: 'كشف حساب من Forks Up · Hall 213' });
+      } else {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        if (share) openWhatsAppMessage('تم تجهيز صورة كشف الحساب. أرفق الصورة التي تم تنزيلها في هذه المحادثة.');
+      }
+    } catch (err) {
+      console.error(err);
+      window.alert(err?.name === 'AbortError' ? 'تم إلغاء المشاركة.' : 'تعذر إنشاء صورة الكشف. حاول مرة أخرى أو استخدم إرسال النص.');
+    } finally { setExporting(''); }
+  };
   const [prices, setPrices] = useState(round.prices || {});
   const [delivery, setDelivery] = useState(round.delivery_fee || 0);
 
@@ -1071,7 +1098,11 @@ function InvoicePanel({ round, busy, onSave }) {
         <div className="bill-title"><h3>كشوف الحسابات</h3><b>إجمالي الفاتورة: {money(result.grandTotal)}</b></div>
 <div className="bill-sharing-options">
   <p className="muted">اختر طريقة إرسال الكشف عبر WhatsApp:</p>
-  <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال الكشف الجماعي لكل الموظفين ↗</button>
+  <div className="invoice-action-row">
+  <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png', true)}>{exporting === 'group' ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف الجماعي'}</button>
+  <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage('group', 'Forks-Up-Group-Bill.png')}>تنزيل صورة الكشف</button>
+  <button className="whatsapp-btn" onClick={() => shareGroupBill(round, result)}>إرسال النص الجماعي عبر WhatsApp ↗</button>
+</div>
 </div>
 
         {result.people.map(person => <div className="bill-person" key={person}>
@@ -1088,10 +1119,45 @@ function InvoicePanel({ round, busy, onSave }) {
             <div><span>نصيب التوصيل والمصاريف</span><span>{money(result.bills[person].delivery)}</span></div>
           </div>
 
-          <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال كشف الحساب عبر WhatsApp ↗</button>
+          <div className="invoice-action-row">
+  <button className="whatsapp-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`, true)}>{exporting === person ? 'جارٍ تجهيز الصورة...' : 'مشاركة صورة الكشف'}</button>
+  <button className="secondary small-btn" disabled={!!exporting} onClick={() => exportInvoiceImage(person, `Forks-Up-${safeFileName(person)}.png`)}>تنزيل الصورة</button>
+  <button className="whatsapp-btn" onClick={() => shareBill(round, person, result.bills[person])}>إرسال النص عبر WhatsApp ↗</button>
+</div>
         </div>)}
       </div>}
     </>}
+    {missingPrices.length === 0 && <div style={{ position: 'absolute', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
+      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person] }))} grandTotal={result.grandTotal} />
+      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person] }]} grandTotal={result.bills[person].total} />)}
+    </div>}
+  </div>;
+}
+
+function safeFileName(value) {
+  return String(value || 'Employee').replace(/[^\w\u0600-\u06FF-]+/g, '-').slice(0, 50);
+}
+
+function InvoiceImageCard({ refCallback, round, title, people, grandTotal }) {
+  return <div ref={refCallback} dir="rtl" style={{ width: '820px', boxSizing: 'border-box', padding: '42px', background: '#f7f3e9', color: '#252b28', fontFamily: 'Arial, sans-serif' }}>
+    <div style={{ background: '#174b3b', color: '#fffaf0', borderRadius: '22px', padding: '30px 34px', marginBottom: '24px' }}>
+      <div style={{ fontSize: '15px', letterSpacing: '2px', color: '#f5b66b', fontWeight: 700 }}>FORKS UP · HALL NO. 213</div>
+      <div style={{ fontSize: '34px', fontWeight: 800, marginTop: '12px' }}>{title}</div>
+      <div style={{ fontSize: '18px', marginTop: '10px', opacity: .9 }}>{round.food_type}{round.title ? ` · ${round.title}` : ''}</div>
+    </div>
+    {people.map(person => <div key={person.name} style={{ background: '#fffdf7', border: '1px solid #e6dfd0', borderRadius: '18px', padding: '24px', marginBottom: '18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e9e1d2', paddingBottom: '14px', marginBottom: '14px' }}>
+        <strong style={{ fontSize: '24px' }}>{person.name}</strong><strong style={{ fontSize: '24px', color: '#174b3b' }}>{money(person.bill.total)}</strong>
+      </div>
+      {person.bill.items.map((item, index) => <div key={index} style={{ display: 'flex', justifyContent: 'space-between', gap: '18px', padding: '10px 0', borderBottom: '1px solid #eee8dc', fontSize: '17px' }}>
+        <span>{item.description} × {item.quantity} <small style={{ color: '#777' }}>({item.shared ? 'مشترك' : 'فردي'})</small></span><strong style={{ whiteSpace: 'nowrap' }}>{money(item.amount)}</strong>
+      </div>)}
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', fontSize: '16px' }}><span>نصيب التوصيل والمصاريف</span><strong>{money(person.bill.delivery)}</strong></div>
+    </div>)}
+    <div style={{ background: '#f5b66b', borderRadius: '18px', padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#26312b' }}>
+      <strong style={{ fontSize: '22px' }}>الإجمالي المطلوب</strong><strong style={{ fontSize: '30px' }}>{money(grandTotal)}</strong>
+    </div>
+    <div style={{ textAlign: 'center', color: '#647068', fontSize: '14px', marginTop: '22px' }}>Bite Together. Order Smarter.</div>
   </div>;
 }
 
