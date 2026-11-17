@@ -1506,35 +1506,54 @@ function InvoicePanel({ round, busy, onSave }) {
   const lines = useMemo(() => aggregateItems(round.orders), [round.orders]);
   const imageRefs = useRef({});
   const [exporting, setExporting] = useState('');
+  const [imageTarget, setImageTarget] = useState(null);
 
-  const exportInvoiceImage = async (key, fileName, share = false) => {
-    const node = imageRefs.current[key];
-    if (!node || exporting) return;
+  const exportInvoiceImage = (key, fileName, share = false) => {
+    if (exporting) return;
+    imageRefs.current = {};
     setExporting(key);
-    try {
-      const dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#f7f3e9', cacheBust: true });
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      const file = new File([blob], fileName, { type: 'image/png' });
-
-      if (share && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-        await navigator.share({ files: [file], title: 'Forks Up', text: 'كشف حساب من Forks Up · Hall 213' });
-      } else {
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        if (share) openWhatsAppMessage('تم تجهيز صورة كشف الحساب. أرفق الصورة التي تم تنزيلها في هذه المحادثة.');
-      }
-    } catch (err) {
-      console.error(err);
-      window.alert(err?.name === 'AbortError' ? 'تم إلغاء المشاركة.' : 'تعذر إنشاء صورة الكشف. حاول مرة أخرى أو استخدم إرسال النص.');
-    } finally {
-      setExporting('');
-    }
+    setImageTarget({ key, fileName, share });
   };
+
+  useEffect(() => {
+    if (!imageTarget) return;
+    let cancelled = false;
+    const createImage = async () => {
+      try {
+        // Mount only the requested invoice image; rendering every employee's
+        // hidden image at once can freeze mobile browsers on large rounds.
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        const node = imageRefs.current[imageTarget.key];
+        if (!node) throw new Error('Invoice image is not ready');
+        const dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#f7f3e9', cacheBust: true });
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const file = new File([blob], imageTarget.fileName, { type: 'image/png' });
+
+        if (imageTarget.share && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+          await navigator.share({ files: [file], title: 'Forks Up', text: 'كشف حساب من Forks Up · Hall 213' });
+        } else {
+          const link = document.createElement('a');
+          link.href = dataUrl;
+          link.download = imageTarget.fileName;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          if (imageTarget.share) openWhatsAppMessage('تم تجهيز صورة كشف الحساب. أرفق الصورة التي تم تنزيلها في هذه المحادثة.');
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) window.alert(err?.name === 'AbortError' ? 'تم إلغاء المشاركة.' : 'تعذر إنشاء صورة الكشف. حاول مرة أخرى أو استخدم إرسال النص.');
+      } finally {
+        if (!cancelled) {
+          setImageTarget(null);
+          setExporting('');
+        }
+      }
+    };
+    createImage();
+    return () => { cancelled = true; };
+  }, [imageTarget]);
 
   const [prices, setPrices] = useState(round.prices || {});
   const [delivery, setDelivery] = useState(round.delivery_fee || 0);
@@ -1617,9 +1636,12 @@ function InvoicePanel({ round, busy, onSave }) {
 
     </>}
 
-    {missingPrices.length === 0 && <div style={{ position: 'absolute', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
-      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person] }))} grandTotal={result.grandTotal} />
-      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person] }]} grandTotal={result.bills[person].total} />)}
+    {imageTarget && missingPrices.length === 0 && <div style={{ position: 'fixed', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
+      {imageTarget.key === 'group' ? (
+        <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person] }))} grandTotal={result.grandTotal} />
+      ) : (
+        <InvoiceImageCard refCallback={node => { imageRefs.current[imageTarget.key] = node; }} round={round} title={`كشف حساب: ${imageTarget.key}`} people={[{ name: imageTarget.key, bill: result.bills[imageTarget.key] }]} grandTotal={result.bills[imageTarget.key]?.total || 0} />
+      )}
     </div>}
   </div>;
 }
