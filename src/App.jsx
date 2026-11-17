@@ -45,6 +45,10 @@ function App() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [routeToken, setRouteToken] = useState(new URLSearchParams(window.location.search).get('token'));
+  const [employees, setEmployees] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+  const [resourceBusy, setResourceBusy] = useState(false);
+
 
   const flash = useCallback(message => {
     setNotice(message);
@@ -181,6 +185,111 @@ function App() {
       supabase.removeChannel(channel);
     };
   }, [session, activeId, loadRound, loadRounds, report]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setEmployees([]);
+      setFavorites([]);
+      return;
+    }
+    let active = true;
+    Promise.all([
+      supabase.from('employee_profiles').select('*').order('employee_name'),
+      supabase.from('favorite_items').select('*').order('item_name')
+    ]).then(([employeeResult, favoriteResult]) => {
+      if (!active) return;
+      if (employeeResult.error) throw employeeResult.error;
+      if (favoriteResult.error) throw favoriteResult.error;
+      setEmployees(employeeResult.data || []);
+      setFavorites(favoriteResult.data || []);
+    }).catch(report);
+    return () => { active = false; };
+  }, [session?.user?.id, report]);
+
+  const refreshDirectory = async () => {
+    const [employeeResult, favoriteResult] = await Promise.all([
+      supabase.from('employee_profiles').select('*').order('employee_name'),
+      supabase.from('favorite_items').select('*').order('item_name')
+    ]);
+    if (employeeResult.error) throw employeeResult.error;
+    if (favoriteResult.error) throw favoriteResult.error;
+    setEmployees(employeeResult.data || []);
+    setFavorites(favoriteResult.data || []);
+  };
+
+  const addEmployee = async (employee_name, phone = '') => {
+    const { error: insertError } = await supabase.from('employee_profiles')
+      .insert({ created_by: session.user.id, employee_name: employee_name.trim(), phone: phone.trim() || null });
+    if (insertError) throw insertError;
+    await refreshDirectory();
+    flash('تم حفظ الموظف في الدليل');
+  };
+
+  const removeEmployee = async id => {
+    const { error: deleteError } = await supabase.from('employee_profiles').delete().eq('id', id);
+    if (deleteError) throw deleteError;
+    await refreshDirectory();
+  };
+
+  const addFavorite = async (item_name, restaurant_name = '') => {
+    const { error: insertError } = await supabase.from('favorite_items')
+      .insert({ created_by: session.user.id, item_name: item_name.trim(), restaurant_name: restaurant_name.trim() });
+    if (insertError) throw insertError;
+    await refreshDirectory();
+    flash('تم حفظ الصنف في المفضلة');
+  };
+
+  const removeFavorite = async id => {
+    const { error: deleteError } = await supabase.from('favorite_items').delete().eq('id', id);
+    if (deleteError) throw deleteError;
+    await refreshDirectory();
+  };
+
+  const exportBackup = async () => {
+    setResourceBusy(true);
+    try {
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
+      const data = {};
+      for (const table of tables) {
+        const { data: rows, error: queryError } = await supabase.from(table).select('*');
+        if (queryError) throw queryError;
+        data[table] = rows || [];
+      }
+      const backup = { app: 'Forks Up', version: 1, exported_at: new Date().toISOString(), data };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Forks-Up-Backup-${new Date().toISOString().slice(0,10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      flash('تم تنزيل النسخة الاحتياطية');
+    } catch (err) { report(err); }
+    finally { setResourceBusy(false); }
+  };
+
+  const importBackup = async file => {
+    if (!file) return;
+    if (!window.confirm('سيتم دمج بيانات النسخة الاحتياطية مع بيانات حسابك الحالية. هل تريد المتابعة؟')) return;
+    setResourceBusy(true);
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup?.app !== 'Forks Up' || backup?.version !== 1 || !backup?.data) throw new Error('ملف النسخة الاحتياطية غير صالح.');
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
+      for (const table of tables) {
+        const rows = backup.data[table] || [];
+        if (!Array.isArray(rows)) throw new Error(`بيانات ${table} غير صالحة.`);
+        if (!rows.length) continue;
+        const safeRows = rows.map(row => ({ ...row, created_by: ['rounds','employee_profiles','favorite_items'].includes(table) ? session.user.id : row.created_by }));
+        const { error: restoreError } = await supabase.from(table).upsert(safeRows);
+        if (restoreError) throw restoreError;
+      }
+      await Promise.all([loadRounds(), refreshDirectory()]);
+      if (activeId) await loadRound(activeId);
+      flash('تم استيراد ودمج النسخة الاحتياطية');
+    } catch (err) { report(err); }
+    finally { setResourceBusy(false); }
+  };
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -580,6 +689,15 @@ function App() {
           </select>
         </div>
       </>}
+
+      <section className="panel card" style={{ marginTop: 24 }}>
+        <div className="panel-title"><div><h3>دليل الفريق والمفضلة والنسخ الاحتياطي</h3><p className="muted">أدوات مساعدة لكل جولات Hall No. 213.</p></div></div>
+        <div className="tools-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 16 }}>
+          <EmployeesPanel employees={employees} busy={resourceBusy} onAdd={addEmployee} onDelete={removeEmployee} />
+          <FavoritesPanel favorites={favorites} busy={resourceBusy} onAdd={addFavorite} onDelete={removeFavorite} />
+          <BackupPanel busy={resourceBusy} onExport={exportBackup} onImport={importBackup} />
+        </div>
+      </section>
 
       <footer>Forks Up <span>•</span> Hall No. 213 <span>•</span> Built for eating together.</footer>
     </main>
@@ -1591,6 +1709,68 @@ function SharePanel({ round }) {
       <b>Forks Up · HALL 213</b>
       <small>امسح الكود لتسجيل طلبك</small>
     </div>
+  </div>;
+}
+
+function EmployeesPanel({ employees, busy, onAdd, onDelete }) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState('');
+  const submit = async event => {
+    event.preventDefault(); setError('');
+    try { await onAdd(name, phone); setName(''); setPhone(''); }
+    catch (err) { setError(err.message || 'تعذر حفظ الموظف.'); }
+  };
+  return <div className="sub-panel" style={{ border: '1px solid var(--line,#e6dfd0)', borderRadius: 14, padding: 14 }}>
+    <h4>ملفات الموظفين ({employees.length})</h4>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 8 }}>
+      <input required minLength="2" maxLength="100" value={name} onChange={e=>setName(e.target.value)} placeholder="اسم الموظف" />
+      <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="رقم الهاتف (اختياري)" />
+      <button className="secondary small-btn" disabled={busy}>إضافة إلى الدليل</button>
+    </form>
+    {error && <small className="inline-error">{error}</small>}
+    <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 10 }}>
+      {employees.map(person=><div key={person.id} className="history-row"><b>{person.employee_name}</b><span>{person.phone || ''}</span><button className="text-btn danger" disabled={busy} onClick={()=>onDelete(person.id)}>حذف</button></div>)}
+      {!employees.length && <small className="muted">لا يوجد موظفون محفوظون بعد.</small>}
+    </div>
+  </div>;
+}
+
+function FavoritesPanel({ favorites, busy, onAdd, onDelete }) {
+  const [item, setItem] = useState('');
+  const [restaurant, setRestaurant] = useState('');
+  const [error, setError] = useState('');
+  const submit = async event => {
+    event.preventDefault(); setError('');
+    try { await onAdd(item, restaurant); setItem(''); setRestaurant(''); }
+    catch (err) { setError(err.message || 'تعذر حفظ الصنف.'); }
+  };
+  return <div className="sub-panel" style={{ border: '1px solid var(--line,#e6dfd0)', borderRadius: 14, padding: 14 }}>
+    <h4>الأصناف المفضلة ({favorites.length})</h4>
+    <form onSubmit={submit} style={{ display: 'grid', gap: 8 }}>
+      <input required maxLength="180" value={item} onChange={e=>setItem(e.target.value)} placeholder="اسم الصنف" />
+      <input value={restaurant} onChange={e=>setRestaurant(e.target.value)} placeholder="المطعم (اختياري)" />
+      <button className="secondary small-btn" disabled={busy}>حفظ في المفضلة</button>
+    </form>
+    {error && <small className="inline-error">{error}</small>}
+    <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 10 }}>
+      {favorites.map(fav=><div key={fav.id} className="history-row"><b>{fav.item_name}</b><span>{fav.restaurant_name}</span><button className="text-btn danger" disabled={busy} onClick={()=>onDelete(fav.id)}>حذف</button></div>)}
+      {!favorites.length && <small className="muted">لم تحفظ أصنافًا بعد.</small>}
+    </div>
+  </div>;
+}
+
+function BackupPanel({ busy, onExport, onImport }) {
+  const inputRef = useRef(null);
+  return <div className="sub-panel" style={{ border: '1px solid var(--line,#e6dfd0)', borderRadius: 14, padding: 14 }}>
+    <h4>النسخ الاحتياطي</h4>
+    <p className="muted">تصدير جولاتك وطلباتها وأسعارها وسجلها، أو دمج نسخة محفوظة سابقًا.</p>
+    <div style={{ display: 'grid', gap: 8 }}>
+      <button className="primary small-btn" disabled={busy} onClick={onExport}>تنزيل نسخة احتياطية JSON</button>
+      <button className="secondary small-btn" disabled={busy} onClick={()=>inputRef.current?.click()}>استعادة / دمج نسخة احتياطية</button>
+      <input ref={inputRef} type="file" accept="application/json,.json" hidden onChange={e=>{onImport(e.target.files?.[0]);e.target.value='';}} />
+    </div>
+    <small className="hint">الاستعادة تدمج البيانات ولا تحذف بياناتك الحالية. احتفظ بالملف في مكان آمن.</small>
   </div>;
 }
 
