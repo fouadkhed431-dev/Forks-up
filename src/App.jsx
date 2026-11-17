@@ -284,7 +284,7 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       if (backup?.app !== 'Forks Up' || backup?.version !== 1 || !backup?.data) throw new Error('ملف النسخة الاحتياطية غير صالح.');
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','round_payments','employee_profiles','favorite_items'];
       for (const table of tables) {
         if (!Array.isArray(backup.data[table] || [])) throw new Error(`بيانات ${table} غير صالحة.`);
       }
