@@ -128,14 +128,15 @@ function App() {
       return;
     }
 
-    const [roundResult, orderResult, priceResult, logResult] = await Promise.all([
+    const [roundResult, orderResult, priceResult, logResult, paymentResult] = await Promise.all([
       supabase.from('rounds').select('*').eq('id', id).single(),
       supabase.from('orders').select('*, order_items(*)').eq('round_id', id).order('created_at', { ascending: true }),
       supabase.from('item_prices').select('*').eq('round_id', id),
-      supabase.from('edit_logs').select('*').eq('round_id', id).order('created_at', { ascending: false }).limit(100)
+      supabase.from('edit_logs').select('*').eq('round_id', id).order('created_at', { ascending: false }).limit(100),
+      supabase.from('round_payments').select('*').eq('round_id', id)
     ]);
 
-    for (const result of [roundResult, orderResult, priceResult, logResult]) {
+    for (const result of [roundResult, orderResult, priceResult, logResult, paymentResult]) {
       if (result.error) throw result.error;
     }
 
@@ -148,7 +149,9 @@ function App() {
       orders: orderResult.data || [],
       prices: priceMap,
       priceRows: priceResult.data || [],
-      logs: logResult.data || []
+      logs: logResult.data || [],
+      payments: Object.fromEntries((paymentResult.data || []).map(row => [row.employee_name.trim().toLocaleLowerCase('ar'), Number(row.amount_paid)])),
+      paymentRows: paymentResult.data || []
     });
   }, []);
 
@@ -184,6 +187,7 @@ function App() {
         loadRound(activeId).catch(report);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item_prices', filter: `round_id=eq.${activeId}` }, () => loadRound(activeId).catch(report))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'round_payments', filter: `round_id=eq.${activeId}` }, () => loadRound(activeId).catch(report))
       .subscribe();
 
     return () => {
@@ -253,7 +257,7 @@ function App() {
   const exportBackup = async () => {
     setResourceBusy(true);
     try {
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','round_payments','employee_profiles','favorite_items'];
       const data = {};
       for (const table of tables) {
         const { data: rows, error: queryError } = await supabase.from(table).select('*');
@@ -549,11 +553,11 @@ function App() {
   const updatePayment = async (person, total, amountPaid) => {
     const paid = Math.max(0, Math.min(Number(total) || 0, Number(amountPaid) || 0));
     const payment_status = paid <= 0 ? 'unpaid' : paid + 0.001 >= Number(total) ? 'paid' : 'partial';
-    const { error: paymentError } = await supabase
-      .from('orders')
-      .update({ amount_paid: paid, payment_status })
-      .eq('round_id', roundData.id)
-      .eq('employee_name', person);
+    const existing = (roundData.paymentRows || []).find(row => row.employee_name.trim().toLocaleLowerCase('ar') === person.trim().toLocaleLowerCase('ar'));
+    const paymentQuery = existing
+      ? supabase.from('round_payments').update({ amount_paid: paid }).eq('id', existing.id)
+      : supabase.from('round_payments').insert({ round_id: roundData.id, employee_name: person.trim(), amount_paid: paid });
+    const { error: paymentError } = await paymentQuery;
     if (paymentError) throw paymentError;
     await loadRound(roundData.id);
     flash('تم تحديث حالة الدفع');
@@ -1625,7 +1629,7 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
 
         {result.people.map(person => {
           const order = round.orders.find(entry => entry.employee_name === person);
-          const paid = Number(order?.amount_paid || 0);
+          const paid = Number(round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0);
           const total = Number(result.bills[person].total || 0);
           const paymentState = paid <= 0 ? 'لم يدفع' : paid + 0.001 >= total ? 'دفع بالكامل' : 'دفع جزئيًا';
           return <div className="bill-person" key={person}>
@@ -1663,8 +1667,8 @@ function InvoicePanel({ round, busy, onSave, onPaymentUpdate, onSettle }) {
     </>}
 
     {missingPrices.length === 0 && <div style={{ position: 'absolute', left: '-10000px', top: 0, width: '820px', pointerEvents: 'none' }} aria-hidden="true">
-      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person], order: round.orders.find(entry => entry.employee_name === person) }))} grandTotal={result.grandTotal} />
-      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person], order: round.orders.find(entry => entry.employee_name === person) }]} grandTotal={result.bills[person].total} />)}
+      <InvoiceImageCard refCallback={node => { imageRefs.current.group = node; }} round={round} title="كشف الحساب الجماعي" people={result.people.map(person => ({ name: person, bill: result.bills[person], amountPaid: round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0 }))} grandTotal={result.grandTotal} />
+      {result.people.map(person => <InvoiceImageCard key={person} refCallback={node => { imageRefs.current[person] = node; }} round={round} title={`كشف حساب: ${person}`} people={[{ name: person, bill: result.bills[person], amountPaid: round.payments?.[person.trim().toLocaleLowerCase('ar')] || 0 }]} grandTotal={result.bills[person].total} />)}
     </div>}
   </div>;
 }
@@ -1691,8 +1695,8 @@ function InvoiceImageCard({ refCallback, round, title, people, grandTotal }) {
         <span>{item.description} × {item.quantity} <small style={{ color: '#777' }}>({item.shared ? 'مشترك' : 'فردي'})</small></span><strong style={{ whiteSpace: 'nowrap' }}>{money(item.amount)}</strong>
       </div>)}
       <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '14px', fontSize: '16px' }}><span>نصيب التوصيل والمصاريف</span><strong>{money(person.bill.delivery)}</strong></div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', fontSize: '15px', color: '#53645b' }}><span>المدفوع</span><strong>{money(person.order?.amount_paid || 0)}</strong></div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', fontSize: '15px', color: '#53645b' }}><span>المتبقي</span><strong>{money(Math.max(0, person.bill.total - Number(person.order?.amount_paid || 0)))}</strong></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', fontSize: '15px', color: '#53645b' }}><span>المدفوع</span><strong>{money(person.amountPaid || 0)}</strong></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', fontSize: '15px', color: '#53645b' }}><span>المتبقي</span><strong>{money(Math.max(0, person.bill.total - Number(person.amountPaid || 0)))}</strong></div>
     </div>)}
     <div style={{ background: '#f5b66b', borderRadius: '18px', padding: '22px 26px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#26312b' }}>
       <strong style={{ fontSize: '22px' }}>الإجمالي المطلوب</strong><strong style={{ fontSize: '30px' }}>{money(grandTotal)}</strong>
