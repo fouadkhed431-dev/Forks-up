@@ -46,7 +46,6 @@ function App() {
   const [error, setError] = useState('');
   const [routeToken, setRouteToken] = useState(new URLSearchParams(window.location.search).get('token'));
   const [employees, setEmployees] = useState([]);
-  const [favorites, setFavorites] = useState([]);
   const [resourceBusy, setResourceBusy] = useState(false);
   const [roundSearch, setRoundSearch] = useState('');
 
@@ -195,32 +194,22 @@ function App() {
   useEffect(() => {
     if (!session?.user?.id) {
       setEmployees([]);
-      setFavorites([]);
       return;
     }
     let active = true;
-    Promise.all([
-      supabase.from('employee_profiles').select('*').order('employee_name'),
-      supabase.from('favorite_items').select('*').order('item_name')
-    ]).then(([employeeResult, favoriteResult]) => {
-      if (!active) return;
-      if (employeeResult.error) throw employeeResult.error;
-      if (favoriteResult.error) throw favoriteResult.error;
-      setEmployees(employeeResult.data || []);
-      setFavorites(favoriteResult.data || []);
-    }).catch(report);
+    supabase.from('employee_profiles').select('*').order('employee_name')
+      .then(({ data, error: queryError }) => {
+        if (!active) return;
+        if (queryError) throw queryError;
+        setEmployees(data || []);
+      }).catch(report);
     return () => { active = false; };
   }, [session?.user?.id, report]);
 
   const refreshDirectory = async () => {
-    const [employeeResult, favoriteResult] = await Promise.all([
-      supabase.from('employee_profiles').select('*').order('employee_name'),
-      supabase.from('favorite_items').select('*').order('item_name')
-    ]);
-    if (employeeResult.error) throw employeeResult.error;
-    if (favoriteResult.error) throw favoriteResult.error;
-    setEmployees(employeeResult.data || []);
-    setFavorites(favoriteResult.data || []);
+    const { data, error: queryError } = await supabase.from('employee_profiles').select('*').order('employee_name');
+    if (queryError) throw queryError;
+    setEmployees(data || []);
   };
 
   const addEmployee = async (employee_name, phone = '') => {
@@ -237,24 +226,10 @@ function App() {
     await refreshDirectory();
   };
 
-  const addFavorite = async (item_name, restaurant_name = '') => {
-    const { error: insertError } = await supabase.from('favorite_items')
-      .insert({ created_by: session.user.id, item_name: item_name.trim(), restaurant_name: restaurant_name.trim() });
-    if (insertError) throw insertError;
-    await refreshDirectory();
-    flash('تم حفظ الصنف في المفضلة');
-  };
-
-  const removeFavorite = async id => {
-    const { error: deleteError } = await supabase.from('favorite_items').delete().eq('id', id);
-    if (deleteError) throw deleteError;
-    await refreshDirectory();
-  };
-
   const exportBackup = async () => {
     setResourceBusy(true);
     try {
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles',];
       const data = {};
       for (const table of tables) {
         const { data: rows, error: queryError } = await supabase.from(table).select('*');
@@ -281,7 +256,7 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       if (backup?.app !== 'Forks Up' || backup?.version !== 1 || !backup?.data) throw new Error('ملف النسخة الاحتياطية غير صالح.');
-      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
+      const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles',];
       for (const table of tables) {
         if (!Array.isArray(backup.data[table] || [])) throw new Error(`بيانات ${table} غير صالحة.`);
       }
@@ -666,7 +641,6 @@ function App() {
         {tab === 'orders' && <OrdersPanel
           round={roundData}
           employees={employees}
-          favorites={favorites}
           busy={busy}
           onSave={saveOrder}
           onDelete={deleteOrder}
@@ -729,10 +703,9 @@ function App() {
       </>}
 
       <section className="panel card" style={{ marginTop: 24 }}>
-        <div className="panel-title"><div><h3>دليل الفريق والمفضلة والنسخ الاحتياطي</h3><p className="muted">أدوات مساعدة لكل جولات Hall No. 213.</p></div></div>
+        <div className="panel-title"><div><h3>دليل الفريق والنسخ الاحتياطي</h3><p className="muted">أدوات مساعدة لكل جولات Hall No. 213.</p></div></div>
         <div className="tools-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 16 }}>
           <EmployeesPanel employees={employees} busy={resourceBusy} onAdd={addEmployee} onDelete={removeEmployee} />
-          <FavoritesPanel favorites={favorites} busy={resourceBusy} onAdd={addFavorite} onDelete={removeFavorite} />
           <BackupPanel busy={resourceBusy} onExport={exportBackup} onImport={importBackup} />
         </div>
       </section>
@@ -1026,7 +999,7 @@ function CreateRoundDialog({ onCreate, busy }) {
 }
 
 // نافذة إضافة شخص وطلبه مباشرة بواسطة المسؤول
-function AdminCreateOrderDialog({ round, employees = [], favorites = [], busy, onCreate }) {
+function AdminCreateOrderDialog({ round, employees = [], busy, onCreate }) {
   const emptyItem = () => ({
     key: crypto.randomUUID(),
     description: '',
@@ -1130,15 +1103,10 @@ function AdminCreateOrderDialog({ round, employees = [], favorites = [], busy, o
           <input
             required
             maxLength="180"
-            list="forks-up-favorite-items"
             value={item.description}
             onChange={e => patchItem(item.key, { description: e.target.value })}
             placeholder="مثلاً: تشيز برجر دابل، بطاطس..."
           />
-          <datalist id="forks-up-favorite-items">
-            {favorites.map(favorite => <option key={favorite.id} value={favorite.item_name}>{favorite.restaurant_name}</option>)}
-          </datalist>
-
           <div className="item-controls">
             <label>الكمية
               <input
@@ -1369,7 +1337,7 @@ function GuestPage({ token, onBack }) {
   </div>;
 }
 
-function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDelete, onCreate, onToggle }) {
+function OrdersPanel({ round, employees = [], busy, onSave, onDelete, onCreate, onToggle }) {
   const canEdit = true;
   const canAdd = isRoundOpen(round);
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
@@ -1395,7 +1363,7 @@ function OrdersPanel({ round, employees = [], favorites = [], busy, onSave, onDe
       {!canAdd && <small className="hint">إضافة طلبات جديدة متاحة عند فتح الجولة فقط؛ يمكن للمسؤول تصحيح الطلبات الحالية قبل التسوية.</small>}
     </div>
 
-    <AdminCreateOrderDialog round={round} employees={employees} favorites={favorites} busy={busy} onCreate={onCreate} />
+    <AdminCreateOrderDialog round={round} employees={employees} busy={busy} onCreate={onCreate} />
 
     {!round.orders.length
       ? <div className="empty-inline">لا توجد طلبات حتى الآن. يمكنك إضافة طلب بنفسك أو مشاركة QR Code ليبدأ الموظفون التسجيل.</div>
@@ -1787,30 +1755,6 @@ function EmployeesPanel({ employees, busy, onAdd, onDelete }) {
     <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 10 }}>
       {employees.map(person=><div key={person.id} className="history-row"><b>{person.employee_name}</b><span>{person.phone || ''}</span><button className="text-btn danger" disabled={busy} onClick={()=>onDelete(person.id)}>حذف</button></div>)}
       {!employees.length && <small className="muted">لا يوجد موظفون محفوظون بعد.</small>}
-    </div>
-  </div>;
-}
-
-function FavoritesPanel({ favorites, busy, onAdd, onDelete }) {
-  const [item, setItem] = useState('');
-  const [restaurant, setRestaurant] = useState('');
-  const [error, setError] = useState('');
-  const submit = async event => {
-    event.preventDefault(); setError('');
-    try { await onAdd(item, restaurant); setItem(''); setRestaurant(''); }
-    catch (err) { setError(err.message || 'تعذر حفظ الصنف.'); }
-  };
-  return <div className="sub-panel" style={{ border: '1px solid var(--line,#e6dfd0)', borderRadius: 14, padding: 14 }}>
-    <h4>الأصناف المفضلة ({favorites.length})</h4>
-    <form onSubmit={submit} style={{ display: 'grid', gap: 8 }}>
-      <input required maxLength="180" value={item} onChange={e=>setItem(e.target.value)} placeholder="اسم الصنف" />
-      <input value={restaurant} onChange={e=>setRestaurant(e.target.value)} placeholder="المطعم (اختياري)" />
-      <button className="secondary small-btn" disabled={busy}>حفظ في المفضلة</button>
-    </form>
-    {error && <small className="inline-error">{error}</small>}
-    <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 10 }}>
-      {favorites.map(fav=><div key={fav.id} className="history-row"><b>{fav.item_name}</b><span>{fav.restaurant_name}</span><button className="text-btn danger" disabled={busy} onClick={()=>onDelete(fav.id)}>حذف</button></div>)}
-      {!favorites.length && <small className="muted">لم تحفظ أصنافًا بعد.</small>}
     </div>
   </div>;
 }
