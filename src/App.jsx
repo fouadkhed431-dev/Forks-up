@@ -277,13 +277,10 @@ function App() {
       if (backup?.app !== 'Forks Up' || backup?.version !== 1 || !backup?.data) throw new Error('ملف النسخة الاحتياطية غير صالح.');
       const tables = ['rounds','orders','order_items','item_prices','edit_logs','employee_profiles','favorite_items'];
       for (const table of tables) {
-        const rows = backup.data[table] || [];
-        if (!Array.isArray(rows)) throw new Error(`بيانات ${table} غير صالحة.`);
-        if (!rows.length) continue;
-        const safeRows = rows.map(row => ({ ...row, created_by: ['rounds','employee_profiles','favorite_items'].includes(table) ? session.user.id : row.created_by }));
-        const { error: restoreError } = await supabase.from(table).upsert(safeRows);
-        if (restoreError) throw restoreError;
+        if (!Array.isArray(backup.data[table] || [])) throw new Error(`بيانات ${table} غير صالحة.`);
       }
+      const { error: restoreError } = await supabase.rpc('admin_restore_backup', { p_backup: backup.data });
+      if (restoreError) throw restoreError;
       await Promise.all([loadRounds(), refreshDirectory()]);
       if (activeId) await loadRound(activeId);
       flash('تم استيراد ودمج النسخة الاحتياطية');
