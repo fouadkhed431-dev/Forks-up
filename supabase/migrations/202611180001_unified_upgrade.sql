@@ -248,7 +248,7 @@ begin
     insert into public.round_payments(id,round_id,employee_name,amount_paid,updated_at)
     values((v->>'id')::uuid,v_round_id,v->>'employee_name',coalesce((v->>'amount_paid')::numeric,0),
       coalesce(nullif(v->>'updated_at','')::timestamptz,now()))
-    on conflict(round_id, lower(trim(employee_name))) do update set amount_paid=excluded.amount_paid,updated_at=excluded.updated_at;
+    on conflict (round_id, (lower(trim(employee_name)))) do update set amount_paid=excluded.amount_paid,updated_at=excluded.updated_at;
   end loop;
 
   for v in select value from jsonb_array_elements(coalesce(p_backup->'item_prices','[]'::jsonb)) loop
