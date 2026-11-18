@@ -624,7 +624,7 @@ function App() {
       </>}
 
       <section className="panel card" style={{ marginTop: 24 }}>
-        <div className="panel-title"><div><h3>دليل الفريق والنسخ الاحتياطي</h3><p className="muted">أدوات مساعدة لكل جولات Hall No. 213.</p></div></div>
+        <div className="panel-title"><div><h3>النسخ الاحتياطي</h3><p className="muted">تصدير بيانات جولات Hall No. 213 أو استعادة نسخة محفوظة.</p></div></div>
         <div className="tools-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 16 }}>
           <BackupPanel busy={resourceBusy} onExport={exportBackup} onImport={importBackup} />
         </div>
@@ -1258,15 +1258,15 @@ function GuestPage({ token, onBack }) {
 }
 
 function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
-  const canEdit = true;
-  const canAdd = isRoundOpen(round);
+  const canEdit = isRoundOpen(round);
+  const canAdd = canEdit;
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
   return <div className="panel card">
     <div className="panel-title">
       <div>
         <h3>طلبات الموظفين</h3>
-        <p className="muted">{canEdit ? (canAdd ? 'يمكنك تعديل الطلبات وإضافة طلبات جديدة قبل الإغلاق.' : 'استقبال الطلبات مغلق؛ يمكنك تصحيح الطلبات حتى اعتماد التسوية المالية.') : 'تم اعتماد التسوية؛ التعديلات المالية والطلبات مقفلة.'}</p>
+        <p className="muted">{canEdit ? 'يمكنك تعديل الطلبات وإضافة طلبات جديدة قبل إغلاق الجولة.' : 'استقبال الطلبات مغلق؛ يمكنك متابعة إدخال الأسعار وإعداد الفواتير دون تعديل الطلبات.'}</p>
       </div>
       <button className="secondary small-btn" disabled={busy || expired || false} onClick={onToggle}>
         {expired ? 'انتهى الموعد' : round.status === 'open' ? 'إغلاق الجولة' : 'إعادة فتح الجولة'}
