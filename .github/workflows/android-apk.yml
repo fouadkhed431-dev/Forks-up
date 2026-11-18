@@ -40,8 +40,7 @@ jobs:
           packages: ''
 
       - name: Install required Android SDK packages
-        run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Install dependencies
         run: npm install
@@ -53,7 +52,7 @@ jobs:
         run: npm run build
         env:
           VITE_SUPABASE_URL: https://hjwexjfxpmlyfunmyaqq.supabase.co
-          VITE_SUPABASE_ANON_KEY: sb_publishable_TXw-wzoYRZ9L3dmXYHbMZA_jNpbhldD
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Add Android platform
         run: npx cap add android
@@ -64,26 +63,75 @@ jobs:
       - name: Install image processing tools
         run: sudo apt-get update && sudo apt-get install -y imagemagick
 
-      - name: Apply official Forks Up launcher icon
+      - name: Apply official adaptive launcher icon
         run: |
+          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/color android/app/src/main/res/mipmap-anydpi-v26
+          cp public/forks-up-launcher.jpg android/app/src/main/res/drawable/ic_launcher_foreground.jpg
+          cat > android/app/src/main/res/values/ic_launcher_colors.xml <<'EOF'
+          <resources><color name="ic_launcher_background">#F7F3E7</color></resources>
+          EOF
+          for name in ic_launcher ic_launcher_round; do
+            cat > "android/app/src/main/res/mipmap-anydpi-v26/${name}.xml" <<EOF
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background"/>
+              <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+          </adaptive-icon>
+          EOF
+          done
           for entry in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
             density="${entry%%:*}"
             size="${entry##*:}"
             mkdir -p "android/app/src/main/res/mipmap-${density}"
-            convert public/forks-up-192.png -resize "${size}x${size}" "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+            convert public/forks-up-launcher.jpg -resize "${size}x${size}" "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
             cp "android/app/src/main/res/mipmap-${density}/ic_launcher.png" "android/app/src/main/res/mipmap-${density}/ic_launcher_round.png"
           done
 
-      - name: Build debug APK
+      - name: Configure stable Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Missing ANDROID_KEYSTORE_BASE64 repository secret" && exit 1)
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD repository secret" && exit 1)
+          test -n "$ANDROID_KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS repository secret" && exit 1)
+          test -n "$ANDROID_KEY_PASSWORD" || (echo "Missing ANDROID_KEY_PASSWORD repository secret" && exit 1)
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/forks-up-upload-key.jks"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("android/app/build.gradle")
+          s=p.read_text()
+          block = """
+              signingConfigs {
+                  release {
+                      storeFile file(System.getenv("ANDROID_KEYSTORE_FILE"))
+                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+                  }
+              }
+          """
+          s=s.replace("    buildTypes {", block + "\n    buildTypes {", 1)
+          s=s.replace("        release {", "        release {\n            signingConfig signingConfigs.release", 1)
+          p.write_text(s)
+          PY
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/forks-up-upload-key.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build signed release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
-      - name: Upload APK
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: forks-up-android-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: forks-up-android-release
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
