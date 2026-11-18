@@ -60,13 +60,10 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Install image processing tools
-        run: sudo apt-get update && sudo apt-get install -y imagemagick
-
-      - name: Apply official adaptive launcher icon
+      - name: Apply launcher icon from valid PNG assets
         run: |
           mkdir -p android/app/src/main/res/drawable android/app/src/main/res/color android/app/src/main/res/mipmap-anydpi-v26
-          cp public/forks-up-launcher.jpg android/app/src/main/res/drawable/ic_launcher_foreground.jpg
+          cp public/forks-up-512.png android/app/src/main/res/drawable/ic_launcher_foreground.png
           cat > android/app/src/main/res/values/ic_launcher_colors.xml <<'EOF'
           <resources><color name="ic_launcher_background">#F7F3E7</color></resources>
           EOF
@@ -78,13 +75,19 @@ jobs:
           </adaptive-icon>
           EOF
           done
-          for entry in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
-            density="${entry%%:*}"
-            size="${entry##*:}"
+          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
             mkdir -p "android/app/src/main/res/mipmap-${density}"
-            convert public/forks-up-launcher.jpg -resize "${size}x${size}" "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
-            cp "android/app/src/main/res/mipmap-${density}/ic_launcher.png" "android/app/src/main/res/mipmap-${density}/ic_launcher_round.png"
           done
+          cp public/forks-up-192.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp public/forks-up-192.png android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
+          cp public/forks-up-192.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp public/forks-up-192.png android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+          cp public/forks-up-192.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp public/forks-up-192.png android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
+          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
+          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 
       - name: Build debug APK
         working-directory: android
