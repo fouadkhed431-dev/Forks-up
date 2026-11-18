@@ -131,6 +131,7 @@ jobs:
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
           from pathlib import Path
+          ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
           ns = "{http://schemas.android.com/apk/res/android}"
           manifest = ET.parse("android/app/src/main/AndroidManifest.xml").getroot()
           app = manifest.find("application")
