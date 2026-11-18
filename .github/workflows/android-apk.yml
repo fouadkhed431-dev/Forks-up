@@ -60,35 +60,79 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Apply launcher icon from valid PNG assets
+      - name: Generate and explicitly wire official Android launcher icon
         run: |
-          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/color android/app/src/main/res/mipmap-anydpi-v26
-          rm -f android/app/src/main/res/values/ic_launcher_background.xml android/app/src/main/res/values/ic_launcher_colors.xml
-          cp public/forks-up-512.png android/app/src/main/res/drawable/ic_launcher_foreground.png
-          cat > android/app/src/main/res/values/ic_launcher_colors.xml <<'EOF'
-          <resources><color name="ic_launcher_background">#F7F3E7</color></resources>
-          EOF
-          for name in ic_launcher ic_launcher_round; do
-            cat > "android/app/src/main/res/mipmap-anydpi-v26/${name}.xml" <<EOF
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@color/ic_launcher_background"/>
-              <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-          </adaptive-icon>
-          EOF
-          done
-          for density in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
-            mkdir -p "android/app/src/main/res/mipmap-${density}"
-          done
-          cp public/forks-up-192.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-          cp public/forks-up-192.png android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png
-          cp public/forks-up-192.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          cp public/forks-up-192.png android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png
-          cp public/forks-up-192.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          cp public/forks-up-192.png android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png
-          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png
-          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          cp public/forks-up-512.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          source = Image.open("public/forks-up-512.png").convert("RGBA")
+          # Keep the official penguin and the complete Forks Up sign; omit the tiny slogan.
+          crop = source.crop((58, 14, 456, 365))
+          cream = (247, 243, 231, 255)
+
+          # Legacy launcher icons: square cream canvas with a legible centered mark.
+          for density, size in {
+              "mdpi": 48, "hdpi": 72, "xhdpi": 96,
+              "xxhdpi": 144, "xxxhdpi": 192
+          }.items():
+              out = Image.new("RGBA", (size, size), cream)
+              mark = crop.copy()
+              mark.thumbnail((int(size * .92), int(size * .92)), Image.Resampling.LANCZOS)
+              out.alpha_composite(mark, ((size-mark.width)//2, (size-mark.height)//2))
+              folder = Path(f"android/app/src/main/res/mipmap-{density}")
+              folder.mkdir(parents=True, exist_ok=True)
+              out.save(folder / "forks_up_launcher.png")
+              out.save(folder / "forks_up_launcher_round.png")
+
+          # Android 8+ adaptive icon foreground uses a UNIQUE resource name.
+          # This avoids Capacitor's default ic_launcher_foreground vector taking precedence.
+          fg = Image.new("RGBA", (432, 432), (0, 0, 0, 0))
+          mark = crop.copy()
+          mark.thumbnail((390, 390), Image.Resampling.LANCZOS)
+          fg.alpha_composite(mark, ((432-mark.width)//2, (432-mark.height)//2))
+          drawable = Path("android/app/src/main/res/drawable")
+          drawable.mkdir(parents=True, exist_ok=True)
+          fg.save(drawable / "forks_up_adaptive_foreground.png")
+
+          values = Path("android/app/src/main/res/values")
+          values.mkdir(parents=True, exist_ok=True)
+          (values / "forks_up_launcher_colors.xml").write_text(
+              '<resources><color name="forks_up_launcher_background">#F7F3E7</color></resources>',
+              encoding="utf-8"
+          )
+          adaptive = '''<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/forks_up_launcher_background"/>
+              <foreground android:drawable="@drawable/forks_up_adaptive_foreground"/>
+          </adaptive-icon>'''
+          adaptive_dir = Path("android/app/src/main/res/mipmap-anydpi-v26")
+          adaptive_dir.mkdir(parents=True, exist_ok=True)
+          (adaptive_dir / "forks_up_launcher.xml").write_text(adaptive, encoding="utf-8")
+          (adaptive_dir / "forks_up_launcher_round.xml").write_text(adaptive, encoding="utf-8")
+
+          # Explicitly bind both launcher icon attributes in the actual Android manifest.
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          tree = ET.parse(manifest)
+          root = tree.getroot()
+          android_ns = "{http://schemas.android.com/apk/res/android}"
+          app = root.find("application")
+          if app is None:
+              raise SystemExit("AndroidManifest.xml has no application element")
+          app.set(android_ns + "icon", "@mipmap/forks_up_launcher")
+          app.set(android_ns + "roundIcon", "@mipmap/forks_up_launcher_round")
+          tree.write(manifest, encoding="utf-8", xml_declaration=True)
+          print("Launcher icon wired to @mipmap/forks_up_launcher and round variant")
+          PY
+
+      - name: Verify launcher icon resources and manifest
+        run: |
+          grep -q 'android:icon="@mipmap/forks_up_launcher"' android/app/src/main/AndroidManifest.xml
+          grep -q 'android:roundIcon="@mipmap/forks_up_launcher_round"' android/app/src/main/AndroidManifest.xml
+          test -s android/app/src/main/res/drawable/forks_up_adaptive_foreground.png
+          test -s android/app/src/main/res/mipmap-anydpi-v26/forks_up_launcher.xml
+          echo "Official launcher icon resources verified before APK build"
 
       - name: Build debug APK
         working-directory: android
