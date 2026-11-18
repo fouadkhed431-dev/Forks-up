@@ -51,7 +51,7 @@ jobs:
         run: npm run build
         env:
           VITE_SUPABASE_URL: https://hjwexjfxpmlyfunmyaqq.supabase.co
-          VITE_SUPABASE_ANON_KEY: sb_publishable_TXw-wzoYRZ9L9dmXYHbMZA_jNpbhldD
+          VITE_SUPABASE_ANON_KEY: sb_publishable_TXw-wzoYRZ9L3dmXYHbMZA_jNpbhldD
 
       - name: Add Android platform
         run: npx cap add android
