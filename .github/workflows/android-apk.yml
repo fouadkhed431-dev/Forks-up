@@ -63,6 +63,7 @@ jobs:
       - name: Apply launcher icon from valid PNG assets
         run: |
           mkdir -p android/app/src/main/res/drawable android/app/src/main/res/color android/app/src/main/res/mipmap-anydpi-v26
+          rm -f android/app/src/main/res/values/ic_launcher_background.xml android/app/src/main/res/values/ic_launcher_colors.xml
           cp public/forks-up-512.png android/app/src/main/res/drawable/ic_launcher_foreground.png
           cat > android/app/src/main/res/values/ic_launcher_colors.xml <<'EOF'
           <resources><color name="ic_launcher_background">#F7F3E7</color></resources>
