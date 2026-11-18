@@ -1280,7 +1280,7 @@ function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
         disabled={busy || !canAdd || !canEdit}
         onClick={() => document.getElementById('admin-create-order')?.showModal()}
       >＋ إضافة شخص وطلبه</button>
-      {!canAdd && <small className="hint">إضافة طلبات جديدة متاحة عند فتح الجولة فقط؛ يمكن للمسؤول تصحيح الطلبات الحالية قبل التسوية.</small>}
+      {!canAdd && <small className="hint">إضافة الطلبات وتعديلها متاحان قبل إغلاق الجولة فقط.</small>}
     </div>
 
     <AdminCreateOrderDialog round={round} busy={busy} onCreate={onCreate} />
