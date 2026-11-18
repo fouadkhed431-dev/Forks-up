@@ -9,6 +9,7 @@
   "background_color": "#F7F3E7",
   "theme_color": "#173C35",
   "orientation": "portrait",
+  "categories": ["food", "productivity"],
   "icons": [
     {
       "src": "/forks-up-launcher.jpg",
