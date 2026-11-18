@@ -36,11 +36,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
+
+      - name: Install required Android SDK packages
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Install dependencies
         run: npm install
@@ -52,7 +51,7 @@ jobs:
         run: npm run build
         env:
           VITE_SUPABASE_URL: https://hjwexjfxpmlyfunmyaqq.supabase.co
-          VITE_SUPABASE_ANON_KEY: sb_publishable_TXw-wzoYRZ9L3dmXYHbMZA_jNpbhldD
+          VITE_SUPABASE_ANON_KEY: sb_publishable_TXw-wzoYRZ9L9dmXYHbMZA_jNpbhldD
 
       - name: Add Android platform
         run: npx cap add android
