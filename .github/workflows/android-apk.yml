@@ -61,6 +61,9 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Install image processing tools
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
       - name: Apply official Forks Up launcher icon
         run: |
           for entry in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
