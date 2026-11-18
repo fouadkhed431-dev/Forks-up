@@ -128,11 +128,27 @@ jobs:
 
       - name: Verify launcher icon resources and manifest
         run: |
-          grep -q 'android:icon="@mipmap/forks_up_launcher"' android/app/src/main/AndroidManifest.xml
-          grep -q 'android:roundIcon="@mipmap/forks_up_launcher_round"' android/app/src/main/AndroidManifest.xml
-          test -s android/app/src/main/res/drawable/forks_up_adaptive_foreground.png
-          test -s android/app/src/main/res/mipmap-anydpi-v26/forks_up_launcher.xml
-          echo "Official launcher icon resources verified before APK build"
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          ns = "{http://schemas.android.com/apk/res/android}"
+          manifest = ET.parse("android/app/src/main/AndroidManifest.xml").getroot()
+          app = manifest.find("application")
+          assert app is not None, "Missing application element"
+          assert app.get(ns + "icon") == "@mipmap/forks_up_launcher", app.attrib
+          assert app.get(ns + "roundIcon") == "@mipmap/forks_up_launcher_round", app.attrib
+          required = [
+              "android/app/src/main/res/drawable/forks_up_adaptive_foreground.png",
+              "android/app/src/main/res/mipmap-anydpi-v26/forks_up_launcher.xml",
+              "android/app/src/main/res/mipmap-anydpi-v26/forks_up_launcher_round.xml",
+              "android/app/src/main/res/mipmap-xxxhdpi/forks_up_launcher.png",
+              "android/app/src/main/res/mipmap-xxxhdpi/forks_up_launcher_round.png",
+          ]
+          for item in required:
+              p = Path(item)
+              assert p.is_file() and p.stat().st_size > 100, f"Missing/empty icon resource: {item}"
+          print("Verified manifest references and all launcher icon variants.")
+          PY
 
       - name: Build debug APK
         working-directory: android
