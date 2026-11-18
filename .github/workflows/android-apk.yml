@@ -52,7 +52,7 @@ jobs:
         run: npm run build
         env:
           VITE_SUPABASE_URL: https://hjwexjfxpmlyfunmyaqq.supabase.co
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_ANON_KEY: sb_publishable_TXw-wzoYRZ9L3dmXYHbMZA_jNpbhldD
 
       - name: Add Android platform
         run: npx cap add android
@@ -92,6 +92,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/forks-up-upload-key.jks
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64" || (echo "Missing ANDROID_KEYSTORE_BASE64 repository secret" && exit 1)
           test -n "$ANDROID_KEYSTORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD repository secret" && exit 1)
@@ -116,11 +117,6 @@ jobs:
           s=s.replace("        release {", "        release {\n            signingConfig signingConfigs.release", 1)
           p.write_text(s)
           PY
-        env:
-          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/forks-up-upload-key.jks
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Build signed release APK
         working-directory: android
