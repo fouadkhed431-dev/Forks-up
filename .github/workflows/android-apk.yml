@@ -61,6 +61,16 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      - name: Apply official Forks Up launcher icon
+        run: |
+          for entry in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
+            density="${entry%%:*}"
+            size="${entry##*:}"
+            mkdir -p "android/app/src/main/res/mipmap-${density}"
+            convert public/forks-up-192.png -resize "${size}x${size}" "android/app/src/main/res/mipmap-${density}/ic_launcher.png"
+            cp "android/app/src/main/res/mipmap-${density}/ic_launcher.png" "android/app/src/main/res/mipmap-${density}/ic_launcher_round.png"
+          done
+
       - name: Build debug APK
         working-directory: android
         run: |
