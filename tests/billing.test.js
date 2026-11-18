@@ -49,3 +49,45 @@ describe('currency rounding', () => {
     expect(grandTotal).toBe(10);
   });
 });
+
+
+describe('billing edge cases before release', () => {
+  it('deduplicates shared participants and includes the order owner once', () => {
+    const data = [{
+      employee_name: 'أحمد',
+      order_items: [{
+        description: 'وجبة جماعية',
+        quantity: 1,
+        kind: 'shared',
+        participants: ['أحمد', 'محمد', 'محمد', 'سارة']
+      }]
+    }];
+    const { people, bills, grandTotal } = calculateBills(data, { 'وجبة جماعية': 100 }, 0);
+    expect(people).toHaveLength(3);
+    expect(bills['أحمد'].total + bills['محمد'].total + bills['سارة'].total).toBe(100);
+    expect(grandTotal).toBe(100);
+  });
+
+  it('keeps item and delivery allocations equal to the entered totals after cent rounding', () => {
+    const data = [{
+      employee_name: 'أحمد',
+      order_items: [{
+        description: 'طبق مشترك',
+        quantity: 2,
+        kind: 'shared',
+        participants: ['أحمد', 'محمد', 'سارة']
+      }]
+    }];
+    const { bills, grandTotal } = calculateBills(data, { 'طبق مشترك': 10.01 }, 10);
+    const sum = Object.values(bills).reduce((total, bill) => total + bill.total, 0);
+    expect(sum).toBe(30.02);
+    expect(grandTotal).toBe(30.02);
+  });
+
+  it('returns a safe zero-value result for a round with no orders', () => {
+    const result = calculateBills([], {}, 25);
+    expect(result.people).toEqual([]);
+    expect(result.bills).toEqual({});
+    expect(result.grandTotal).toBe(0);
+  });
+});
