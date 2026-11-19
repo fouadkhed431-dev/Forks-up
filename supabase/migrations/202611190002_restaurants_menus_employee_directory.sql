@@ -6,9 +6,9 @@ create table if not exists public.restaurants (
   created_by uuid not null references auth.users(id) on delete cascade,
   name text not null check (length(trim(name)) between 2 and 120),
   category text not null default '',
-  created_at timestamptz not null default now(),
-  unique (created_by, lower(trim(name)))
+  created_at timestamptz not null default now()
 );
+create unique index if not exists restaurants_owner_name_uidx on public.restaurants(created_by, lower(trim(name)));
 
 create table if not exists public.restaurant_menu_items (
   id uuid primary key default gen_random_uuid(),
@@ -134,6 +134,6 @@ insert into public.restaurants(created_by,name,category)
 select distinct created_by,'أسماك الحوت','مأكولات بحرية'
 from public.rounds
 where created_by is not null
-on conflict (created_by, lower(trim(name))) do nothing;
+on conflict (created_by, (lower(trim(name)))) do nothing;
 
 commit;
