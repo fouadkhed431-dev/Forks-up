@@ -267,6 +267,16 @@ function App() {
     window.history.replaceState({}, document.title, window.location.pathname);
   };
 
+  const createRestaurant = async name => {
+    const cleanName = name.trim();
+    if (cleanName.length < 2) throw new Error('اكتب اسم المطعم بشكل صحيح.');
+    const { data, error: insertError } = await supabase.from('restaurants').insert({ created_by: session.user.id, name: cleanName }).select('id,name,category').single();
+    if (insertError) throw insertError;
+    setRestaurants(old => [...old, data].sort((a,b) => a.name.localeCompare(b.name,'ar')));
+    flash('تم حفظ المطعم');
+    return data;
+  };
+
   const createRound = async form => {
     setBusy(true);
     setError('');
@@ -553,7 +563,7 @@ function App() {
         <button onClick={() => setError('')}>إغلاق</button>
       </div>}
 
-      <CreateRoundDialog onCreate={createRound} busy={busy} restaurants={restaurants} />
+      <CreateRoundDialog onCreate={createRound} onCreateRestaurant={createRestaurant} busy={busy} restaurants={restaurants} />
 
       <ParticipantsDialog participants={participants} />
 
@@ -928,9 +938,11 @@ function ParticipantsDialog({ participants }) {
   </dialog>;
 }
 
-function CreateRoundDialog({ onCreate, busy, restaurants = [] }) {
+function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [] }) {
   const [foodType, setFoodType] = useState('');
   const [restaurantId, setRestaurantId] = useState('');
+  const [newRestaurantName, setNewRestaurantName] = useState('');
+  const [restaurantError, setRestaurantError] = useState('');
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState('');
   const [file, setFile] = useState(null);
@@ -968,6 +980,11 @@ function CreateRoundDialog({ onCreate, busy, restaurants = [] }) {
         <option value="">بدون مطعم محفوظ</option>
         {restaurants.map(restaurant => <option key={restaurant.id} value={restaurant.id}>{restaurant.name} {restaurant.category ? `— ${restaurant.category}` : ''}</option>)}
       </select>
+      <div style={{display:'flex',gap:8,alignItems:'center',marginTop:8}}>
+        <input value={newRestaurantName} onChange={e=>setNewRestaurantName(e.target.value)} placeholder="إضافة مطعم جديد" maxLength="120" />
+        <button type="button" className="secondary small-btn" onClick={async()=>{try{setRestaurantError('');const created=await onCreateRestaurant(newRestaurantName);setRestaurantId(created.id);setNewRestaurantName('');}catch(err){setRestaurantError(err.message || 'تعذر إضافة المطعم.');}}}>إضافة</button>
+      </div>
+      {restaurantError && <small className="inline-error">{restaurantError}</small>}
       <label>نوع الطعام</label>
       <input required maxLength="80" placeholder="مثلاً: مأكولات بحرية، برجر، بيتزا..." value={foodType} onChange={e => setFoodType(e.target.value)} />
 
