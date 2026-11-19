@@ -12,6 +12,10 @@ export const normalizeItemName = (name = '') => cleanItemLabel(name)
   .replace(/ى/g, 'ي')
   .replace(/[.,،؛:!?؟()[\]{}"'`]/g, ' ')
   .replace(/\s+/g, ' ')
+  // Treat Arabic conjunction spacing consistently: "زيت وليمون" = "زيت و ليمون"
+  .replace(/\s+و\s+/g, ' و')
+  .replace(/\s+و(?=\S)/g, ' و')
+  .replace(/\s+/g, ' ')
   .trim()
   .toLocaleLowerCase('ar');
 export const money = value => `${Number(value || 0).toFixed(2)} ج.م`;
