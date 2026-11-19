@@ -107,8 +107,14 @@ function App() {
   const loadRestaurants = useCallback(async () => {
     const { data, error: queryError } = await supabase.from('restaurants').select('id,name,category').order('name');
     if (queryError) throw queryError;
+    if ((!data || !data.length) && session?.user?.id) {
+      const { data: seeded, error: seedError } = await supabase.from('restaurants').insert({ created_by: session.user.id, name: 'أسماك الحوت', category: 'مأكولات بحرية' }).select('id,name,category').single();
+      if (seedError) throw seedError;
+      setRestaurants([seeded]);
+      return;
+    }
     setRestaurants(data || []);
-  }, []);
+  }, [session?.user?.id]);
 
   const loadRounds = useCallback(async () => {
     if (!session?.user?.id) return;
@@ -1146,7 +1152,7 @@ function AdminCreateOrderDialog({ round, busy, onCreate }) {
             </label>
           </div>
 
-          {item.kind === 'shared' && <div className="participant-picker"><b>اختر المشاركين معه</b>
+          {item.kind === 'shared' && <div className="participant-picker" style={{display:"grid",gap:8,padding:10,border:"1px solid var(--line,#e6dfd0)",borderRadius:10}}><b>اختر المشاركين معه</b>
             {employeeNames.filter(person => person !== name.trim()).map(person => {
               const selected = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).includes(person);
               return <label key={person}><input type="checkbox" checked={selected} onChange={e => {
@@ -1345,7 +1351,7 @@ function GuestPage({ token, onBack }) {
               </label>
             </div>
 
-            {item.kind === 'shared' && <div className="participant-picker"><b>اختر المشاركين معك</b>
+            {item.kind === 'shared' && <div className="participant-picker" style={{display:"grid",gap:8,padding:10,border:"1px solid var(--line,#e6dfd0)",borderRadius:10}}><b>اختر المشاركين معك</b>
               {(round.employee_names || []).filter(person => person.trim() && person.trim() !== name.trim()).map(person => {
                 const selected = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).includes(person);
                 return <label key={person}><input type="checkbox" checked={selected} onChange={e => {
@@ -1495,7 +1501,7 @@ function EditOrder({ order, employeeNames = [], busy, onCancel, onSave }) {
         <option value="individual">فردي</option>
         <option value="shared">مشترك</option>
       </select>
-      {item.kind === 'shared' && <div className="participant-picker"><b>المشاركون</b>
+      {item.kind === 'shared' && <div className="participant-picker" style={{display:"grid",gap:8,padding:10,border:"1px solid var(--line,#e6dfd0)",borderRadius:10}}><b>المشاركون</b>
         {employeeNames.filter(person => person !== name.trim()).map(person => {
           const selected = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).includes(person);
           return <label key={person}><input type="checkbox" checked={selected} onChange={e => {
