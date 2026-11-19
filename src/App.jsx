@@ -152,11 +152,12 @@ function App() {
     }
 
     const restaurantId = roundResult.data.restaurant_id;
-    const [menuResult, requestResult] = restaurantId ? await Promise.all([
-      supabase.from('restaurant_menu_items').select('*').eq('restaurant_id', restaurantId).eq('active', true).order('name'),
-      supabase.from('menu_item_requests').select('*').eq('round_id', id).order('created_at', { ascending: true })
-    ]) : [{ data: [], error: null }, { data: [], error: null }];
-    for (const result of [menuResult, requestResult]) if (result.error) throw result.error;
+    const [menuResult, requestResult, employeeResult] = await Promise.all([
+      restaurantId ? supabase.from('restaurant_menu_items').select('*').eq('restaurant_id', restaurantId).eq('active', true).order('name') : Promise.resolve({ data: [], error: null }),
+      restaurantId ? supabase.from('menu_item_requests').select('*').eq('round_id', id).order('created_at', { ascending: true }) : Promise.resolve({ data: [], error: null }),
+      supabase.from('employee_directory').select('id,employee_name').order('employee_name')
+    ]);
+    for (const result of [menuResult, requestResult, employeeResult]) if (result.error) throw result.error;
 
     const priceMap = Object.fromEntries(
       (priceResult.data || []).map(row => [row.normalized_name, Number(row.unit_price)])
@@ -169,7 +170,8 @@ function App() {
       priceRows: priceResult.data || [],
       logs: logResult.data || [],
       menuItems: menuResult.data || [],
-      menuRequests: requestResult.data || []
+      menuRequests: requestResult.data || [],
+      employeeNames: [...new Set([...(employeeResult.data || []).map(row => row.employee_name), ...getParticipants(orderResult.data || [])])].sort((a,b) => a.localeCompare(b,'ar'))
     });
   }, []);
 
@@ -989,7 +991,7 @@ function CreateRoundDialog({ onCreate, busy, restaurants = [] }) {
 
 // نافذة إضافة شخص وطلبه مباشرة بواسطة المسؤول
 function AdminCreateOrderDialog({ round, busy, onCreate }) {
-  const employeeNames = getParticipants(round.orders || []);
+  const employeeNames = [...new Set([...(round.employeeNames || []), ...getParticipants(round.orders || [])])];
   const emptyItem = () => ({
     key: crypto.randomUUID(),
     description: '',
@@ -1383,7 +1385,7 @@ function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
             busy={busy}
             onSave={next => onSave(order, next)}
             onDelete={() => onDelete(order)}
-            employeeNames={getParticipants(round.orders || [])}
+            employeeNames={[...(round.employeeNames || []), ...getParticipants(round.orders || [])]}
           />)}
         </div>}
   </div>;
