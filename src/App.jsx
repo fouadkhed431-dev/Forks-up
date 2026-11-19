@@ -620,8 +620,11 @@ function App() {
         />}
 
         {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={id => updateRound({ restaurant_id: id })} busy={busy}
-          onAdd={async name => {
-            const { error: insertError } = await supabase.from('restaurant_menu_items').insert({ restaurant_id: roundData.restaurant_id, name: name.trim(), normalized_name: normalizeItemName(name) });
+          onAdd={async textValue => {
+            const names = [...new Set(textValue.split(/\\r?\\n/).map(name => name.trim()).filter(Boolean))];
+            if (!names.length) return;
+            const rows = names.map(name => ({ restaurant_id: roundData.restaurant_id, name, normalized_name: normalizeItemName(name), active: true }));
+            const { error: insertError } = await supabase.from('restaurant_menu_items').upsert(rows, { onConflict: 'restaurant_id,normalized_name', ignoreDuplicates: true });
             if (insertError) throw insertError;
             await loadRound(roundData.id);
             flash('تمت إضافة الصنف إلى منيو المطعم');
@@ -943,6 +946,12 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
   const [restaurantId, setRestaurantId] = useState('');
   const [newRestaurantName, setNewRestaurantName] = useState('');
   const [restaurantError, setRestaurantError] = useState('');
+  useEffect(() => {
+    if (!restaurantId && restaurants.length) {
+      const seafood = restaurants.find(item => item.name.includes('أسماك الحوت'));
+      setRestaurantId((seafood || restaurants[0]).id);
+    }
+  }, [restaurants, restaurantId]);
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState('');
   const [file, setFile] = useState(null);
@@ -1515,9 +1524,9 @@ function RestaurantMenuPanel({ round, restaurants = [], onAssign, busy, onAdd, o
   return <div className="panel card">
     <div className="panel-title"><div><h3>منيو المطعم</h3><p className="muted">الأصناف المعتمدة تظهر للموظفين في نموذج الطلب.</p></div><strong>{round.menuItems?.length || 0} صنف</strong></div>
     {!round.restaurant_id ? <div className="empty-inline" style={{display:'grid',gap:10}}><span>هذه الجولة غير مرتبطة بمطعم. اختر المطعم المناسب لربطها بقائمته.</span><select defaultValue="" onChange={e=>e.target.value && onAssign(e.target.value)}><option value="">اختر مطعماً محفوظاً</option>{restaurants.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div> : <>
-      <form onSubmit={e => { e.preventDefault(); if (name.trim()) run(async () => { await onAdd(name); setName(''); }); }} style={{display:'flex',gap:8,flexWrap:'wrap',margin:'14px 0'}}>
-        <input value={name} onChange={e=>setName(e.target.value)} maxLength="180" placeholder="اسم صنف جديد في منيو المطعم" required />
-        <button className="primary" disabled={busy}>إضافة للمنيو</button>
+      <form onSubmit={e => { e.preventDefault(); if (name.trim()) run(async () => { await onAdd(name); setName(''); }); }} style={{display:'grid',gap:8,margin:'14px 0'}}>
+        <textarea value={name} onChange={e=>setName(e.target.value)} rows="4" placeholder="أضف صنفاً واحداً أو الصق قائمة كاملة — كل صنف في سطر" required />
+        <button className="primary" disabled={busy}>إضافة الأصناف إلى المنيو</button>
       </form>
       {error && <div className="inline-error">{error}</div>}
       <div className="order-list">{(round.menuItems || []).map(item => <div className="order-card" key={item.id}><b>{item.name}</b></div>)}</div>
