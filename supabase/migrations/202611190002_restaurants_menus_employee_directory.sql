@@ -151,6 +151,44 @@ drop trigger if exists forksup_items_participant_ids on public.order_items;
 create trigger forksup_items_participant_ids before insert or update of participants,kind,order_id on public.order_items
 for each row execute function public.sync_forksup_employee_ids();
 
+-- Link historical order lines when a menu item is added or a round is assigned to a restaurant.
+create or replace function public.link_forksup_menu_item_to_orders()
+returns trigger language plpgsql security definer set search_path=public as $link_menu$
+begin
+  update public.order_items oi set menu_item_id=new.id
+  from public.orders o
+  join public.rounds r on r.id=o.round_id
+  where oi.order_id=o.id
+    and r.restaurant_id=new.restaurant_id
+    and lower(trim(oi.description))=lower(trim(new.name));
+  return new;
+end;
+$link_menu$;
+
+drop trigger if exists forksup_link_menu_item_orders on public.restaurant_menu_items;
+create trigger forksup_link_menu_item_orders
+after insert or update of restaurant_id,name on public.restaurant_menu_items
+for each row execute function public.link_forksup_menu_item_to_orders();
+
+create or replace function public.sync_forksup_round_menu_items()
+returns trigger language plpgsql security definer set search_path=public as $sync_round$
+begin
+  if new.restaurant_id is distinct from old.restaurant_id and new.restaurant_id is not null then
+    update public.order_items oi set menu_item_id=mi.id
+    from public.orders o
+    join public.restaurant_menu_items mi on mi.restaurant_id=new.restaurant_id
+    where oi.order_id=o.id and o.round_id=new.id
+      and lower(trim(oi.description))=lower(trim(mi.name));
+  end if;
+  return new;
+end;
+$sync_round$;
+
+drop trigger if exists forksup_sync_round_menu_items on public.rounds;
+create trigger forksup_sync_round_menu_items
+after update of restaurant_id on public.rounds
+for each row execute function public.sync_forksup_round_menu_items();
+
 -- Register the first known restaurant. Menus can be populated later from the actual restaurant menu.
 insert into public.restaurants(created_by,name,category)
 select distinct created_by,'أسماك الحوت','مأكولات بحرية'
