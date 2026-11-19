@@ -1261,15 +1261,17 @@ function GuestPage({ token, onBack }) {
 }
 
 function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
-  const canEdit = isRoundOpen(round);
-  const canAdd = canEdit;
+  // This panel is only rendered in the authenticated administrator dashboard.
+  // Admin corrections remain available after public order intake closes.
+  const canEdit = true;
+  const canAdd = true;
   const expired = Boolean(round.deadline && new Date(round.deadline).getTime() <= Date.now());
 
   return <div className="panel card">
     <div className="panel-title">
       <div>
         <h3>طلبات الموظفين</h3>
-        <p className="muted">{canEdit ? 'يمكنك تعديل الطلبات وإضافة طلبات جديدة قبل إغلاق الجولة.' : 'استقبال الطلبات مغلق؛ يمكنك متابعة إدخال الأسعار وإعداد الفواتير دون تعديل الطلبات.'}</p>
+        <p className="muted">{canEdit && isRoundOpen(round) ? 'يمكنك تعديل الطلبات وإضافة طلبات جديدة.' : 'استقبال الموظفين مغلق، لكن يمكنك بصفتك المسؤول تعديل الطلبات وإضافة أو حذف طلبات قبل اعتماد الفاتورة.'}</p>
       </div>
       <button className="secondary small-btn" disabled={busy || expired || false} onClick={onToggle}>
         {expired ? 'انتهى الموعد' : round.status === 'open' ? 'إغلاق الجولة' : 'إعادة فتح الجولة'}
@@ -1283,7 +1285,7 @@ function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
         disabled={busy || !canAdd || !canEdit}
         onClick={() => document.getElementById('admin-create-order')?.showModal()}
       >＋ إضافة شخص وطلبه</button>
-      {!canAdd && <small className="hint">إضافة الطلبات وتعديلها متاحان قبل إغلاق الجولة فقط.</small>}
+      {!isRoundOpen(round) && <small className="hint">التعديلات هنا متاحة للمسؤول فقط، ولن يُعاد فتح استقبال الموظفين.</small>}
     </div>
 
     <AdminCreateOrderDialog round={round} busy={busy} onCreate={onCreate} />
