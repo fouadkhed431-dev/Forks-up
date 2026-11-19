@@ -635,6 +635,15 @@ function App() {
             await loadRound(roundData.id);
             flash('تمت إضافة الصنف إلى منيو المطعم');
           }}
+          onImportRoundItems={async () => {
+            const names = [...new Set((roundData.orders || []).flatMap(order => order.order_items || []).map(item => item.description?.trim()).filter(Boolean))];
+            if (!names.length) throw new Error('لا توجد أصناف في طلبات هذه الجولة لاستخراجها.');
+            const rows = names.map(name => ({ restaurant_id: roundData.restaurant_id, name, normalized_name: normalizeItemName(name), active: true }));
+            const { error: importError } = await supabase.from('restaurant_menu_items').upsert(rows, { onConflict: 'restaurant_id,normalized_name', ignoreDuplicates: true });
+            if (importError) throw importError;
+            await loadRound(roundData.id);
+            flash(`تم استخراج ${names.length} صنفاً من طلبات الجولة وإضافتها للمنيو`);
+          }}
           onApprove={async request => {
             const { error: insertError } = await supabase.from('restaurant_menu_items').upsert({ restaurant_id: request.restaurant_id, name: request.requested_name, normalized_name: request.normalized_name, active: true }, { onConflict: 'restaurant_id,normalized_name' });
             if (insertError) throw insertError;
@@ -1531,7 +1540,7 @@ function EditOrder({ order, employeeNames = [], busy, onCancel, onSave }) {
   </form>;
 }
 
-function RestaurantMenuPanel({ round, restaurants = [], onAssign, busy, onAdd, onApprove, onDismiss }) {
+function RestaurantMenuPanel({ round, restaurants = [], onAssign, busy, onAdd, onImportRoundItems, onApprove, onDismiss }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const run = async action => { try { setError(''); await action(); } catch (err) { setError(err?.message || 'تعذر حفظ التغيير.'); } };
@@ -1543,6 +1552,8 @@ function RestaurantMenuPanel({ round, restaurants = [], onAssign, busy, onAdd, o
         <button className="primary" disabled={busy}>إضافة الأصناف إلى المنيو</button>
       </form>
       {error && <div className="inline-error">{error}</div>}
+      <button type="button" className="secondary small-btn" disabled={busy || !(round.orders || []).some(order => (order.order_items || []).length)} onClick={() => run(onImportRoundItems)}>استخراج أصناف طلبات هذه الجولة وإضافتها للمنيو</button>
+      <small className="hint">استخدمه إذا كانت هذه الجولة تخص المطعم المحدد؛ سيحوّل الأصناف المطلوبة سابقاً إلى قائمة اختيار موحدة.</small>
       <div className="order-list">{(round.menuItems || []).map(item => <div className="order-card" key={item.id}><b>{item.name}</b></div>)}</div>
       <div className="form-divider" />
       <h4>طلبات إضافة أصناف من الموظفين ({round.menuRequests?.length || 0})</h4>
