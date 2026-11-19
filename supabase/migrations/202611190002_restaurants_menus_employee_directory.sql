@@ -57,23 +57,23 @@ grant select, insert, update, delete on public.restaurants, public.restaurant_me
 -- Seed the employee directory from all historical orders without changing any legacy order.
 insert into public.employee_directory(created_by, employee_name, normalized_name, last_seen_at)
 select r.created_by, min(trim(o.employee_name)),
-       lower(regexp_replace(trim(o.employee_name), '\\s+', ' ', 'g')), max(o.created_at)
+       lower(regexp_replace(trim(o.employee_name), '[[:space:]]+', ' ', 'g')), max(o.created_at)
 from public.orders o join public.rounds r on r.id=o.round_id
 where length(trim(o.employee_name)) between 2 and 100
-group by r.created_by, lower(regexp_replace(trim(o.employee_name), '\\s+', ' ', 'g'))
+group by r.created_by, lower(regexp_replace(trim(o.employee_name), '[[:space:]]+', ' ', 'g'))
 on conflict (created_by, normalized_name) do update
 set last_seen_at=greatest(public.employee_directory.last_seen_at, excluded.last_seen_at);
 
 -- Include people who appeared only as shared-item participants in the initial directory.
 insert into public.employee_directory(created_by, employee_name, normalized_name, last_seen_at)
 select r.created_by, min(trim(p.name)),
-       lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g')), max(o.created_at)
+       lower(regexp_replace(trim(p.name), '[[:space:]]+', ' ', 'g')), max(o.created_at)
 from public.orders o
 join public.rounds r on r.id=o.round_id
 join public.order_items oi on oi.order_id=o.id
 cross join lateral unnest(oi.participants) p(name)
 where length(trim(p.name)) between 2 and 100
-group by r.created_by, lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g'))
+group by r.created_by, lower(regexp_replace(trim(p.name), '[[:space:]]+', ' ', 'g'))
 on conflict (created_by, normalized_name) do update
 set last_seen_at=greatest(public.employee_directory.last_seen_at, excluded.last_seen_at);
 
@@ -81,7 +81,7 @@ set last_seen_at=greatest(public.employee_directory.last_seen_at, excluded.last_
 update public.orders o set employee_id=e.id
 from public.rounds r, public.employee_directory e
 where r.id=o.round_id and e.created_by=r.created_by
-  and e.normalized_name=lower(regexp_replace(trim(o.employee_name), '\\s+', ' ', 'g'))
+  and e.normalized_name=lower(regexp_replace(trim(o.employee_name), '[[:space:]]+', ' ', 'g'))
   and o.employee_id is null;
 
 update public.order_items oi set participant_ids = coalesce((
@@ -90,7 +90,7 @@ update public.order_items oi set participant_ids = coalesce((
   join public.rounds r on r.id=o.round_id
   cross join lateral unnest(oi.participants) p(name)
   join public.employee_directory e on e.created_by=r.created_by
-    and e.normalized_name=lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g'))
+    and e.normalized_name=lower(regexp_replace(trim(p.name), '[[:space:]]+', ' ', 'g'))
   where o.id=oi.order_id
 ), '{}'::uuid[])
 where oi.kind='shared' and cardinality(oi.participant_ids)=0;
@@ -107,7 +107,7 @@ begin
   if tg_table_name='orders' then
     select created_by into v_created_by from public.rounds where id=new.round_id;
     insert into public.employee_directory(created_by,employee_name,normalized_name,last_seen_at)
-    values(v_created_by,trim(new.employee_name),lower(regexp_replace(trim(new.employee_name),'\\s+',' ','g')),now())
+    values(v_created_by,trim(new.employee_name),lower(regexp_replace(trim(new.employee_name),'[[:space:]]+',' ','g')),now())
     on conflict(created_by,normalized_name) do update set
       employee_name=excluded.employee_name,last_seen_at=now()
     returning id into new.employee_id;
@@ -130,7 +130,7 @@ begin
     foreach v_name in array coalesce(new.participants,'{}') loop
       if length(trim(v_name)) between 2 and 100 then
         insert into public.employee_directory(created_by,employee_name,normalized_name,last_seen_at)
-        values(v_created_by,trim(v_name),lower(regexp_replace(trim(v_name),'\\s+',' ','g')),now())
+        values(v_created_by,trim(v_name),lower(regexp_replace(trim(v_name),'[[:space:]]+',' ','g')),now())
         on conflict(created_by,normalized_name) do update set last_seen_at=now()
         returning id into v_owner;
         new.participant_ids := array_append(new.participant_ids,v_owner);
@@ -219,7 +219,7 @@ begin
     raise exception 'INVALID_MENU_REQUEST';
   end if;
   insert into public.menu_item_requests(round_id,restaurant_id,requested_name,normalized_name,requested_by_name)
-  values(v_round.id,v_round.restaurant_id,v_name,lower(regexp_replace(v_name,'\\s+',' ','g')),v_employee)
+  values(v_round.id,v_round.restaurant_id,v_name,lower(regexp_replace(v_name,'[[:space:]]+',' ','g')),v_employee)
   returning id into v_id;
   return v_id;
 end;
