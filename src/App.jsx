@@ -619,7 +619,7 @@ function App() {
           onToggle={() => updateRound({ status: roundData.status === 'open' ? 'closed' : 'open' })}
         />}
 
-        {tab === 'menu' && <RestaurantMenuPanel round={roundData} busy={busy}
+        {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={id => updateRound({ restaurant_id: id })} busy={busy}
           onAdd={async name => {
             const { error: insertError } = await supabase.from('restaurant_menu_items').insert({ restaurant_id: roundData.restaurant_id, name: name.trim(), normalized_name: normalizeItemName(name) });
             if (insertError) throw insertError;
@@ -1508,13 +1508,13 @@ function EditOrder({ order, employeeNames = [], busy, onCancel, onSave }) {
   </form>;
 }
 
-function RestaurantMenuPanel({ round, busy, onAdd, onApprove, onDismiss }) {
+function RestaurantMenuPanel({ round, restaurants = [], onAssign, busy, onAdd, onApprove, onDismiss }) {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const run = async action => { try { setError(''); await action(); } catch (err) { setError(err?.message || 'تعذر حفظ التغيير.'); } };
   return <div className="panel card">
     <div className="panel-title"><div><h3>منيو المطعم</h3><p className="muted">الأصناف المعتمدة تظهر للموظفين في نموذج الطلب.</p></div><strong>{round.menuItems?.length || 0} صنف</strong></div>
-    {!round.restaurant_id ? <div className="empty-inline">هذه الجولة غير مرتبطة بمطعم. أنشئ جولة جديدة واختر المطعم أولاً.</div> : <>
+    {!round.restaurant_id ? <div className="empty-inline" style={{display:'grid',gap:10}}><span>هذه الجولة غير مرتبطة بمطعم. اختر المطعم المناسب لربطها بقائمته.</span><select defaultValue="" onChange={e=>e.target.value && onAssign(e.target.value)}><option value="">اختر مطعماً محفوظاً</option>{restaurants.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div> : <>
       <form onSubmit={e => { e.preventDefault(); if (name.trim()) run(async () => { await onAdd(name); setName(''); }); }} style={{display:'flex',gap:8,flexWrap:'wrap',margin:'14px 0'}}>
         <input value={name} onChange={e=>setName(e.target.value)} maxLength="180" placeholder="اسم صنف جديد في منيو المطعم" required />
         <button className="primary" disabled={busy}>إضافة للمنيو</button>
