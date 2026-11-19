@@ -378,6 +378,22 @@ function App() {
     }
   };
 
+  const saveItemPrice = async (item, value) => {
+    if (value === '' || !Number.isFinite(Number(value)) || Number(value) < 0) return;
+    const { error: priceError } = await supabase
+      .from('item_prices')
+      .upsert({
+        round_id: roundData.id,
+        normalized_name: item.key,
+        display_name: item.label,
+        unit_price: Number(value)
+      }, { onConflict: 'round_id,normalized_name' });
+    if (priceError) {
+      report(priceError);
+      throw priceError;
+    }
+  };
+
   const saveOrder = async (order, next) => {
     setBusy(true);
     setError('');
@@ -575,6 +591,7 @@ function App() {
         {tab === 'invoice' && <InvoicePanel
           round={roundData}
           busy={busy}
+          onPriceSave={saveItemPrice}
           onSave={async (prices, delivery) => {
             setBusy(true);
             setError('');
@@ -1475,7 +1492,7 @@ function RestaurantOrderSummary({ round }) {
   </div>;
 }
 
-function InvoicePanel({ round, busy, onSave }) {
+function InvoicePanel({ round, busy, onSave, onPriceSave }) {
   const lines = useMemo(() => aggregateItems(round.orders), [round.orders]);
   const imageRefs = useRef({});
   const [exporting, setExporting] = useState('');
@@ -1561,7 +1578,14 @@ function InvoicePanel({ round, busy, onSave }) {
         {lines.map(line => <div className="price-row" key={line.key}>
           <b>{line.label}</b>
           <span>{line.quantity}</span>
-          <input type="number" min="0" step="0.01" value={prices[line.key] ?? ''} placeholder="0.00"  onChange={e => setPrices(old => ({ ...old, [line.key]: e.target.value }))} />
+          <input type="number" min="0" step="0.01" value={prices[line.key] ?? ''} placeholder="0.00"
+            onChange={e => setPrices(old => ({ ...old, [line.key]: e.target.value }))}
+            onBlur={e => {
+              const value = e.target.value;
+              if (value !== '' && Number.isFinite(Number(value)) && Number(value) >= 0) {
+                onPriceSave(line, value).catch(() => {});
+              }
+            }} />
         </div>)}
       </div>
 
