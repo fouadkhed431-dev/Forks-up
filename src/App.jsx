@@ -621,7 +621,7 @@ function App() {
 
         {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={id => updateRound({ restaurant_id: id })} busy={busy}
           onAdd={async textValue => {
-            const names = [...new Set(textValue.split(/\\r?\\n/).map(name => name.trim()).filter(Boolean))];
+            const names = [...new Set(textValue.split(/\r?\n/).map(name => name.trim()).filter(Boolean))];
             if (!names.length) return;
             const rows = names.map(name => ({ restaurant_id: roundData.restaurant_id, name, normalized_name: normalizeItemName(name), active: true }));
             const { error: insertError } = await supabase.from('restaurant_menu_items').upsert(rows, { onConflict: 'restaurant_id,normalized_name', ignoreDuplicates: true });
