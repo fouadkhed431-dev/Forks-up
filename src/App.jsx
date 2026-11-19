@@ -555,6 +555,7 @@ function App() {
 
         <div className="tabs">
           <button className={tab === 'orders' ? 'selected' : ''} onClick={() => setTab('orders')}>الطلبات</button>
+          <button className={tab === 'restaurant' ? 'selected' : ''} onClick={() => setTab('restaurant')}>تجميع طلب المطعم</button>
           <button className={tab === 'invoice' ? 'selected' : ''} onClick={() => setTab('invoice')}>الفاتورة والحسابات</button>
           <button className={tab === 'share' ? 'selected' : ''} onClick={() => setTab('share')}>مشاركة الجولة</button>
           <button className={tab === 'history' ? 'selected' : ''} onClick={() => setTab('history')}>سجل التعديلات</button>
@@ -568,6 +569,8 @@ function App() {
           onCreate={createAdminOrder}
           onToggle={() => updateRound({ status: roundData.status === 'open' ? 'closed' : 'open' })}
         />}
+
+        {tab === 'restaurant' && <RestaurantOrderSummary round={roundData} />}
 
         {tab === 'invoice' && <InvoicePanel
           round={roundData}
@@ -1388,6 +1391,86 @@ function EditOrder({ order, busy, onCancel, onSave }) {
       <button className="primary" disabled={busy}>حفظ التعديلات</button>
     </div>
   </form>;
+}
+
+function RestaurantOrderSummary({ round }) {
+  const grouped = useMemo(() => {
+    const map = new Map();
+    for (const order of round.orders || []) {
+      for (const item of order.order_items || order.items || []) {
+        const label = String(item.description || '').trim().replace(/\\s+/g, ' ');
+        if (!label) continue;
+        const key = label.toLocaleLowerCase('ar');
+        const current = map.get(key) || { key, label, quantity: 0, employees: new Map() };
+        const quantity = Math.max(1, Number(item.quantity) || 1);
+        current.quantity += quantity;
+        const employee = String(order.employee_name || '').trim() || 'غير محدد';
+        current.employees.set(employee, (current.employees.get(employee) || 0) + quantity);
+        map.set(key, current);
+      }
+    }
+    return [...map.values()]
+      .map(item => ({ ...item, employees: [...item.employees.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ar')) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [round.orders]);
+
+  const totalUnits = grouped.reduce((sum, item) => sum + item.quantity, 0);
+  const message = [
+    '🍽️ FORKS UP | HALL NO. 213',
+    '📋 تجميع طلب المطعم',
+    `الجولة: ${round.food_type}`,
+    round.title ? `التفاصيل: ${round.title}` : '',
+    `عدد الموظفين: ${new Set((round.orders || []).map(order => order.employee_name).filter(Boolean)).size}`,
+    `إجمالي الوحدات: ${totalUnits}`,
+    '════════════════',
+    ...grouped.map((item, index) => [
+      `${index + 1}. ${item.label} × ${item.quantity}`,
+      `   الطلبات: ${item.employees.map(([name, quantity]) => `${name} (${quantity})`).join('، ')}`
+    ].join('\\n')),
+    '',
+    'Bite Together. Order Smarter.'
+  ].filter(Boolean).join('\\n');
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      window.alert('تم نسخ تجميع الطلبات.');
+    } catch {
+      window.prompt('انسخ تجميع الطلبات:', message);
+    }
+  };
+
+  return <div className="panel card">
+    <div className="panel-title">
+      <div>
+        <h3>تجميع طلب المطعم</h3>
+        <p className="muted">كل الأصناف من جميع الموظفين مجمّعة حسب الاسم، لتعرف الكمية النهائية التي ستطلبها من المطعم.</p>
+      </div>
+      <strong>{grouped.length} أصناف</strong>
+    </div>
+    {!grouped.length ? <div className="empty-inline">لا توجد طلبات مسجلة في هذه الجولة حتى الآن.</div> : <>
+      <div className="summary-grid" style={{ marginBottom: 16 }}>
+        <Stat label="إجمالي الوحدات المطلوبة" value={totalUnits} />
+        <Stat label="عدد الموظفين" value={new Set((round.orders || []).map(order => order.employee_name).filter(Boolean)).size} />
+        <Stat label="عدد الأصناف المختلفة" value={grouped.length} />
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {grouped.map((item, index) => <div key={item.key} style={{ border: '1px solid var(--line,#e6dfd0)', borderRadius: 12, padding: 14, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8, alignItems: 'center' }}>
+          <div>
+            <b>{index + 1}. {item.label}</b>
+            <div className="muted" style={{ fontSize: 13, marginTop: 5 }}>
+              {item.employees.map(([name, quantity]) => `${name} (${quantity})`).join(' · ')}
+            </div>
+          </div>
+          <strong style={{ color: 'var(--primary,#174b3b)', fontSize: 22, whiteSpace: 'nowrap' }}>× {item.quantity}</strong>
+        </div>)}
+      </div>
+      <div className="inline-actions" style={{ marginTop: 16 }}>
+        <button className="secondary" onClick={copy}>نسخ الملخص</button>
+        <button className="whatsapp-btn" onClick={() => openWhatsAppMessage(message)}>إرسال للمطعم عبر WhatsApp ↗</button>
+      </div>
+    </>}
+  </div>;
 }
 
 function InvoicePanel({ round, busy, onSave }) {
