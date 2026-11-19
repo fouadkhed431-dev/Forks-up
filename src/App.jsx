@@ -1103,6 +1103,7 @@ function AdminCreateOrderDialog({ round, busy, onCreate }) {
         value={name}
         onChange={e => setName(e.target.value)}
         placeholder="اكتب اسم الشخص"
+        list="forks-up-employee-list"
       />
       <datalist id="forks-up-employee-list">
         {employeeNames.map(name => <option key={name} value={name} />)}
@@ -1322,7 +1323,8 @@ function GuestPage({ token, onBack }) {
 
         <form onSubmit={submit}>
           <label>اسمك</label>
-          <input required minLength="2" maxLength="100" value={name} onChange={e => setName(e.target.value)} placeholder="اكتب اسمك بالكامل" />
+          <input required minLength="2" maxLength="100" value={name} onChange={e => setName(e.target.value)} placeholder="اكتب اسمك بالكامل" list="guest-employee-list" />
+          <datalist id="guest-employee-list">{(round.employee_names || []).map(person => <option key={person} value={person} />)}</datalist>
 
           <div className="form-divider" />
           <div className="items-title"><b>الأصناف المطلوبة</b><small>أضف كل صنف في سطر مستقل</small></div>
