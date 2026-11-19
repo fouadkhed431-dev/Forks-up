@@ -102,6 +102,7 @@ declare
   v_owner uuid;
   v_created_by uuid;
   v_name text;
+  v_restaurant_id uuid;
 begin
   if tg_table_name='orders' then
     select created_by into v_created_by from public.rounds where id=new.round_id;
@@ -117,6 +118,14 @@ begin
   from public.orders o join public.rounds r on r.id=o.round_id where o.id=new.order_id;
 
   new.participant_ids := '{}';
+  new.menu_item_id := null;
+  select r.restaurant_id into v_restaurant_id from public.rounds r
+  join public.orders o on o.round_id=r.id where o.id=new.order_id;
+  if v_restaurant_id is not null then
+    select mi.id into new.menu_item_id from public.restaurant_menu_items mi
+    where mi.restaurant_id=v_restaurant_id and lower(trim(mi.name))=lower(trim(new.description))
+    limit 1;
+  end if;
   if new.kind='shared' then
     foreach v_name in array coalesce(new.participants,'{}') loop
       if length(trim(v_name)) between 2 and 100 then
