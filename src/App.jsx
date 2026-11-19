@@ -989,7 +989,7 @@ function CreateRoundDialog({ onCreate, busy, restaurants = [] }) {
 
 // نافذة إضافة شخص وطلبه مباشرة بواسطة المسؤول
 function AdminCreateOrderDialog({ round, busy, onCreate }) {
-  const employeeNames = [...new Set((round.orders || []).map(order => order.employee_name?.trim()).filter(Boolean))];
+  const employeeNames = getParticipants(round.orders || []);
   const emptyItem = () => ({
     key: crypto.randomUUID(),
     description: '',
@@ -1118,16 +1118,17 @@ function AdminCreateOrderDialog({ round, busy, onCreate }) {
             </label>
           </div>
 
-          {item.kind === 'shared' && (
-            <label>أسماء المشاركين معه
-              <input
-                value={item.participantsText}
-                onChange={e => patchItem(item.key, { participantsText: e.target.value })}
-                placeholder="مثلاً: أحمد، محمد"
-              />
-              <small className="hint">اسم صاحب الطلب سيُضاف تلقائياً.</small>
-            </label>
-          )}
+          {item.kind === 'shared' && <div className="participant-picker"><b>اختر المشاركين معه</b>
+            {employeeNames.filter(person => person !== name.trim()).map(person => {
+              const selected = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).includes(person);
+              return <label key={person}><input type="checkbox" checked={selected} onChange={e => {
+                const selectedNames = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).filter(Boolean);
+                const next = e.target.checked ? [...selectedNames, person] : selectedNames.filter(x => x !== person);
+                patchItem(item.key, { participantsText: next.join('، ') });
+              }} /> {person}</label>;
+            })}
+            <small className="hint">اسم صاحب الطلب سيُضاف تلقائياً. الأسماء مأخوذة من الطلبات السابقة.</small>
+          </div>}
         </div>
       ))}
 
@@ -1160,7 +1161,7 @@ function GuestPage({ token, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
-  const [items, setItems] = useState([{ key: crypto.randomUUID(), description: '', quantity: 1, kind: 'individual', participantsText: '' }]);
+  const [items, setItems] = useState([{ key: crypto.randomUUID(), description: '', quantity: 1, kind: 'individual', participantsText: '', customRequest: false }]);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -1293,7 +1294,16 @@ function GuestPage({ token, onBack }) {
               {items.length > 1 && <button type="button" className="remove-link" onClick={() => setItems(old => old.filter(x => x.key !== item.key))}>حذف</button>}
             </div>
 
-            <input required value={item.description} maxLength="180" onChange={e => patchItem(item.key, { description: e.target.value })} placeholder="مثلاً: تشيز برجر دابل، بطاطس..." />
+            {round.menu_items?.length ? <select required value={item.customRequest ? '__custom__' : item.description} onChange={e => e.target.value === '__custom__' ? patchItem(item.key, { description: '', customRequest: true }) : patchItem(item.key, { description: e.target.value, customRequest: false })}>
+              <option value="">اختر صنفاً من المنيو</option>
+              {round.menu_items.map(menuItem => <option key={menuItem.id} value={menuItem.name}>{menuItem.name}</option>)}
+              <option value="__custom__">الصنف غير موجود — اكتب طلب إضافة</option>
+            </select> : <input required value={item.description} maxLength="180" onChange={e => patchItem(item.key, { description: e.target.value })} placeholder="مثلاً: سمك مشوي، أرز صيادية..." />}
+            {item.customRequest && <input required value={item.description} maxLength="180" placeholder="اكتب اسم الصنف المطلوب" onChange={e => patchItem(item.key, { description: e.target.value })} />}
+            {item.customRequest && item.description.trim() && <button type="button" className="secondary small-btn" onClick={async () => {
+              const { error: requestError } = await supabase.rpc('request_menu_item', { p_token: token, p_requested_name: item.description.trim(), p_employee_name: name.trim() });
+              window.alert(requestError ? 'تعذر إرسال طلب إضافة الصنف. حاول مرة أخرى.' : 'تم إرسال طلب الصنف للمسؤول للمراجعة.');
+            }}>طلب إضافة الصنف إلى المنيو</button>}
 
             <div className="item-controls">
               <label>الكمية
@@ -1307,10 +1317,17 @@ function GuestPage({ token, onBack }) {
               </label>
             </div>
 
-            {item.kind === 'shared' && <label>أسماء المشاركين معك
-              <input value={item.participantsText} onChange={e => patchItem(item.key, { participantsText: e.target.value })} placeholder="مثلاً: أحمد، محمد" />
-              <small className="hint">اسمك سيُضاف تلقائياً إلى المشاركين.</small>
-            </label>}
+            {item.kind === 'shared' && <div className="participant-picker"><b>اختر المشاركين معك</b>
+              {(round.employee_names || []).filter(person => person.trim() && person.trim() !== name.trim()).map(person => {
+                const selected = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).includes(person);
+                return <label key={person}><input type="checkbox" checked={selected} onChange={e => {
+                  const selectedNames = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).filter(Boolean);
+                  const next = e.target.checked ? [...selectedNames, person] : selectedNames.filter(x => x !== person);
+                  patchItem(item.key, { participantsText: next.join('، ') });
+                }} /> {person}</label>;
+              })}
+              <small className="hint">اسمك يُضاف تلقائياً. القائمة مستخرجة من الطلبات السابقة.</small>
+            </div>}
           </div>)}
 
           <button type="button" className="add-item" onClick={() => setItems(old => [...old, { key: crypto.randomUUID(), description: '', quantity: 1, kind: 'individual', participantsText: '' }])}>＋ إضافة صنف آخر</button>
@@ -1366,18 +1383,20 @@ function OrdersPanel({ round, busy, onSave, onDelete, onCreate, onToggle }) {
             busy={busy}
             onSave={next => onSave(order, next)}
             onDelete={() => onDelete(order)}
+            employeeNames={getParticipants(round.orders || [])}
           />)}
         </div>}
   </div>;
 }
 
-function OrderCard({ order, canEdit, busy, onSave, onDelete }) {
+function OrderCard({ order, canEdit, busy, onSave, onDelete, employeeNames = [] }) {
   const [editing, setEditing] = useState(false);
 
   if (editing) {
     return <div className="order-card">
       <EditOrder
         order={order}
+        employeeNames={employeeNames}
         busy={busy}
         onCancel={() => setEditing(false)}
         onSave={async next => {
@@ -1405,7 +1424,7 @@ function OrderCard({ order, canEdit, busy, onSave, onDelete }) {
   </div>;
 }
 
-function EditOrder({ order, busy, onCancel, onSave }) {
+function EditOrder({ order, employeeNames = [], busy, onCancel, onSave }) {
   const [name, setName] = useState(order.employee_name);
   const [items, setItems] = useState((order.order_items || []).map(item => ({
     ...item,
@@ -1448,7 +1467,16 @@ function EditOrder({ order, busy, onCancel, onSave }) {
         <option value="individual">فردي</option>
         <option value="shared">مشترك</option>
       </select>
-      {item.kind === 'shared' && <input className="participants-input" value={item.participantsText} onChange={e => patch(item.id, { participantsText: e.target.value })} placeholder="المشاركون مفصولون بفاصلة" />}
+      {item.kind === 'shared' && <div className="participant-picker"><b>المشاركون</b>
+        {employeeNames.filter(person => person !== name.trim()).map(person => {
+          const selected = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).includes(person);
+          return <label key={person}><input type="checkbox" checked={selected} onChange={e => {
+            const selectedNames = (item.participantsText || '').split(/[،,]/).map(x => x.trim()).filter(Boolean);
+            const next = e.target.checked ? [...selectedNames, person] : selectedNames.filter(x => x !== person);
+            patch(item.id, { participantsText: next.join('، ') });
+          }} /> {person}</label>;
+        })}
+      </div>}
       <button type="button" className="remove-link" onClick={() => setItems(old => old.filter(x => x !== item))}>حذف الصنف</button>
     </div>)}
 
