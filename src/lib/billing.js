@@ -1,4 +1,19 @@
-export const normalizeItemName = (name = '') => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ar');
+export const cleanItemLabel = (name = '') => String(name)
+  .normalize('NFKC')
+  .trim()
+  // Remove menu numbering such as "1.1 ", "3. " or "2-1 "
+  .replace(/^\s*\d+(?:[.)-]\d+)*[.)-]?\s+/, '')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+export const normalizeItemName = (name = '') => cleanItemLabel(name)
+  .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+  .replace(/[أإآٱ]/g, 'ا')
+  .replace(/ى/g, 'ي')
+  .replace(/[.,،؛:!?؟()[\]{}"'`]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .toLocaleLowerCase('ar');
 export const money = value => `${Number(value || 0).toFixed(2)} ج.م`;
 
 export function aggregateItems(orders = []) {
