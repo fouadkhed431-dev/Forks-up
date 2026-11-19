@@ -1233,6 +1233,11 @@ function GuestPage({ token, onBack }) {
 
     const payload = buildFormItems(items, name.trim());
 
+    if (items.some(item => item.customRequest)) {
+      setError('أرسل طلب إضافة الصنف وانتظر اعتماد المسؤول، ثم حدّث الصفحة واختره من المنيو.');
+      return;
+    }
+
     if (!name.trim() || name.trim().length < 2) {
       setError('اكتب اسمك بشكل صحيح.');
       return;
@@ -1336,8 +1341,9 @@ function GuestPage({ token, onBack }) {
             {item.customRequest && <input required value={item.description} maxLength="180" placeholder="اكتب اسم الصنف المطلوب" onChange={e => patchItem(item.key, { description: e.target.value })} />}
             {item.customRequest && item.description.trim() && <button type="button" className="secondary small-btn" onClick={async () => {
               const { error: requestError } = await supabase.rpc('request_menu_item', { p_token: token, p_requested_name: item.description.trim(), p_employee_name: name.trim() });
-              window.alert(requestError ? 'تعذر إرسال طلب إضافة الصنف. حاول مرة أخرى.' : 'تم إرسال طلب الصنف للمسؤول للمراجعة.');
-            }}>طلب إضافة الصنف إلى المنيو</button>}
+              if (requestError) window.alert('تعذر إرسال طلب إضافة الصنف. حاول مرة أخرى.');
+              else { patchItem(item.key, { requestSent: true }); window.alert('تم إرسال طلب الصنف للمسؤول للمراجعة. بعد اعتماده حدّث الصفحة لاختياره.'); }
+            }} disabled={item.requestSent}>{item.requestSent ? 'تم إرسال الطلب للمراجعة' : 'طلب إضافة الصنف إلى المنيو'}</button>}
 
             <div className="item-controls">
               <label>الكمية
