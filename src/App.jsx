@@ -1205,6 +1205,7 @@ function GuestPage({ token, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
+  const [employeeChoice, setEmployeeChoice] = useState('');
   const [items, setItems] = useState([{ key: crypto.randomUUID(), description: '', quantity: 1, kind: 'individual', participantsText: '', customRequest: false }]);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1332,8 +1333,12 @@ function GuestPage({ token, onBack }) {
 
         <form onSubmit={submit}>
           <label>اسمك</label>
-          <input required minLength="2" maxLength="100" value={name} onChange={e => setName(e.target.value)} placeholder="اكتب اسمك بالكامل" list="guest-employee-list" />
-          <datalist id="guest-employee-list">{(round.employee_names || []).map(person => <option key={person} value={person} />)}</datalist>
+          <select required value={employeeChoice} onChange={e => { setEmployeeChoice(e.target.value); setName(e.target.value === '__new__' ? '' : e.target.value); }}>
+            <option value="">اختر اسمك من القائمة</option>
+            {(round.employee_names || []).map(person => <option key={person} value={person}>{person}</option>)}
+            <option value="__new__">اسمي غير موجود — إدخال اسم جديد</option>
+          </select>
+          {employeeChoice === '__new__' && <input required minLength="2" maxLength="100" value={name} onChange={e => setName(e.target.value)} placeholder="اكتب اسمك بالكامل" />}
 
           <div className="form-divider" />
           <div className="items-title"><b>الأصناف المطلوبة</b><small>أضف كل صنف في سطر مستقل</small></div>
