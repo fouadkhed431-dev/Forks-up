@@ -47,6 +47,7 @@ function App() {
   const [routeToken, setRouteToken] = useState(new URLSearchParams(window.location.search).get('token'));
   const [resourceBusy, setResourceBusy] = useState(false);
   const [roundSearch, setRoundSearch] = useState('');
+  const [restaurants, setRestaurants] = useState([]);
 
 
 
@@ -103,6 +104,12 @@ function App() {
     return () => window.removeEventListener('popstate', handle);
   }, []);
 
+  const loadRestaurants = useCallback(async () => {
+    const { data, error: queryError } = await supabase.from('restaurants').select('id,name,category').order('name');
+    if (queryError) throw queryError;
+    setRestaurants(data || []);
+  }, []);
+
   const loadRounds = useCallback(async () => {
     if (!session?.user?.id) return;
 
@@ -144,6 +151,13 @@ function App() {
       if (result.error) throw result.error;
     }
 
+    const restaurantId = roundResult.data.restaurant_id;
+    const [menuResult, requestResult] = restaurantId ? await Promise.all([
+      supabase.from('restaurant_menu_items').select('*').eq('restaurant_id', restaurantId).eq('active', true).order('name'),
+      supabase.from('menu_item_requests').select('*').eq('round_id', id).order('created_at', { ascending: true })
+    ]) : [{ data: [], error: null }, { data: [], error: null }];
+    for (const result of [menuResult, requestResult]) if (result.error) throw result.error;
+
     const priceMap = Object.fromEntries(
       (priceResult.data || []).map(row => [row.normalized_name, Number(row.unit_price)])
     );
@@ -153,18 +167,21 @@ function App() {
       orders: orderResult.data || [],
       prices: priceMap,
       priceRows: priceResult.data || [],
-      logs: logResult.data || []
+      logs: logResult.data || [],
+      menuItems: menuResult.data || [],
+      menuRequests: requestResult.data || []
     });
   }, []);
 
   useEffect(() => {
     if (session) {
       loadRounds().catch(report);
+      loadRestaurants().catch(report);
     } else {
       setRounds([]);
       setRoundData(null);
     }
-  }, [session, loadRounds, report]);
+  }, [session, loadRounds, loadRestaurants, report]);
 
   useEffect(() => {
     if (session && activeId) {
@@ -267,6 +284,7 @@ function App() {
         created_by: session.user.id,
         title: form.title.trim(),
         food_type: form.foodType.trim(),
+        restaurant_id: form.restaurantId || null,
         deadline: form.deadline || null,
         status: 'open'
       }).select().single();
@@ -316,6 +334,7 @@ function App() {
     await createRound({
       foodType: roundData.food_type,
       title: roundData.title ? `نسخة من ${roundData.title}` : 'جولة مكررة',
+      restaurantId: roundData.restaurant_id || '',
       deadline: null,
       file: null
     });
@@ -532,7 +551,7 @@ function App() {
         <button onClick={() => setError('')}>إغلاق</button>
       </div>}
 
-      <CreateRoundDialog onCreate={createRound} busy={busy} />
+      <CreateRoundDialog onCreate={createRound} busy={busy} restaurants={restaurants} />
 
       <ParticipantsDialog participants={participants} />
 
@@ -546,6 +565,7 @@ function App() {
           <div>
             <p className="eyebrow">الجولة الحالية</p>
             <h2>{roundData.food_type}</h2>
+            {roundData.restaurant_id && <p className="muted">المطعم: {restaurants.find(item => item.id === roundData.restaurant_id)?.name || 'مطعم محدد'}</p>}
             <p className="muted">{roundData.title || 'جولة طلب الطعام'} · {dateLabel(roundData.created_at)}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -571,6 +591,7 @@ function App() {
 
         <div className="tabs">
           <button className={tab === 'orders' ? 'selected' : ''} onClick={() => setTab('orders')}>الطلبات</button>
+          <button className={tab === 'menu' ? 'selected' : ''} onClick={() => setTab('menu')}>منيو المطعم</button>
           <button className={tab === 'restaurant' ? 'selected' : ''} onClick={() => setTab('restaurant')}>تجميع طلب المطعم</button>
           <button className={tab === 'invoice' ? 'selected' : ''} onClick={() => setTab('invoice')}>الفاتورة والحسابات</button>
           <button className={tab === 'share' ? 'selected' : ''} onClick={() => setTab('share')}>مشاركة الجولة</button>
@@ -586,6 +607,27 @@ function App() {
           onToggle={() => updateRound({ status: roundData.status === 'open' ? 'closed' : 'open' })}
         />}
 
+        {tab === 'menu' && <RestaurantMenuPanel round={roundData} busy={busy}
+          onAdd={async name => {
+            const { error: insertError } = await supabase.from('restaurant_menu_items').insert({ restaurant_id: roundData.restaurant_id, name: name.trim(), normalized_name: normalizeItemName(name) });
+            if (insertError) throw insertError;
+            await loadRound(roundData.id);
+            flash('تمت إضافة الصنف إلى منيو المطعم');
+          }}
+          onApprove={async request => {
+            const { error: insertError } = await supabase.from('restaurant_menu_items').upsert({ restaurant_id: request.restaurant_id, name: request.requested_name, normalized_name: request.normalized_name, active: true }, { onConflict: 'restaurant_id,normalized_name' });
+            if (insertError) throw insertError;
+            const { error: deleteError } = await supabase.from('menu_item_requests').delete().eq('id', request.id);
+            if (deleteError) throw deleteError;
+            await loadRound(roundData.id);
+            flash('تم اعتماد الصنف وإضافته للمنيو');
+          }}
+          onDismiss={async request => {
+            const { error: deleteError } = await supabase.from('menu_item_requests').delete().eq('id', request.id);
+            if (deleteError) throw deleteError;
+            await loadRound(roundData.id);
+          }}
+        />}
         {tab === 'restaurant' && <RestaurantOrderSummary round={roundData} />}
 
         {tab === 'invoice' && <InvoicePanel
@@ -884,8 +926,9 @@ function ParticipantsDialog({ participants }) {
   </dialog>;
 }
 
-function CreateRoundDialog({ onCreate, busy }) {
+function CreateRoundDialog({ onCreate, busy, restaurants = [] }) {
   const [foodType, setFoodType] = useState('');
+  const [restaurantId, setRestaurantId] = useState('');
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState('');
   const [file, setFile] = useState(null);
@@ -895,6 +938,7 @@ function CreateRoundDialog({ onCreate, busy }) {
 
     const created = await onCreate({
       foodType,
+      restaurantId,
       title,
       deadline: deadline ? new Date(deadline).toISOString() : null,
       file
@@ -917,6 +961,11 @@ function CreateRoundDialog({ onCreate, busy }) {
         <button type="button" className="icon-btn" onClick={() => document.getElementById('create-round')?.close()}>×</button>
       </div>
 
+      <label>المطعم</label>
+      <select value={restaurantId} onChange={e => setRestaurantId(e.target.value)}>
+        <option value="">بدون مطعم محفوظ</option>
+        {restaurants.map(restaurant => <option key={restaurant.id} value={restaurant.id}>{restaurant.name} {restaurant.category ? `— ${restaurant.category}` : ''}</option>)}
+      </select>
       <label>نوع الطعام</label>
       <input required maxLength="80" placeholder="مثلاً: مأكولات بحرية، برجر، بيتزا..." value={foodType} onChange={e => setFoodType(e.target.value)} />
 
@@ -1410,6 +1459,26 @@ function EditOrder({ order, busy, onCancel, onSave }) {
       <button className="primary" disabled={busy}>حفظ التعديلات</button>
     </div>
   </form>;
+}
+
+function RestaurantMenuPanel({ round, busy, onAdd, onApprove, onDismiss }) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const run = async action => { try { setError(''); await action(); } catch (err) { setError(err?.message || 'تعذر حفظ التغيير.'); } };
+  return <div className="panel card">
+    <div className="panel-title"><div><h3>منيو المطعم</h3><p className="muted">الأصناف المعتمدة تظهر للموظفين في نموذج الطلب.</p></div><strong>{round.menuItems?.length || 0} صنف</strong></div>
+    {!round.restaurant_id ? <div className="empty-inline">هذه الجولة غير مرتبطة بمطعم. أنشئ جولة جديدة واختر المطعم أولاً.</div> : <>
+      <form onSubmit={e => { e.preventDefault(); if (name.trim()) run(async () => { await onAdd(name); setName(''); }); }} style={{display:'flex',gap:8,flexWrap:'wrap',margin:'14px 0'}}>
+        <input value={name} onChange={e=>setName(e.target.value)} maxLength="180" placeholder="اسم صنف جديد في منيو المطعم" required />
+        <button className="primary" disabled={busy}>إضافة للمنيو</button>
+      </form>
+      {error && <div className="inline-error">{error}</div>}
+      <div className="order-list">{(round.menuItems || []).map(item => <div className="order-card" key={item.id}><b>{item.name}</b></div>)}</div>
+      <div className="form-divider" />
+      <h4>طلبات إضافة أصناف من الموظفين ({round.menuRequests?.length || 0})</h4>
+      {!round.menuRequests?.length ? <div className="empty-inline">لا توجد طلبات جديدة.</div> : round.menuRequests.map(request => <div className="order-card" key={request.id} style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}><div><b>{request.requested_name}</b><small>طلبه: {request.requested_by_name}</small></div><div className="order-actions"><button className="primary small-btn" onClick={()=>run(()=>onApprove(request))}>اعتماد</button><button className="text-btn danger" onClick={()=>run(()=>onDismiss(request))}>رفض</button></div></div>)}
+    </>}
+  </div>;
 }
 
 function RestaurantOrderSummary({ round }) {
