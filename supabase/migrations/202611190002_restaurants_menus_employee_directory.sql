@@ -64,6 +64,19 @@ group by r.created_by, lower(regexp_replace(trim(o.employee_name), '\\s+', ' ', 
 on conflict (created_by, normalized_name) do update
 set last_seen_at=greatest(public.employee_directory.last_seen_at, excluded.last_seen_at);
 
+-- Include people who appeared only as shared-item participants in the initial directory.
+insert into public.employee_directory(created_by, employee_name, normalized_name, last_seen_at)
+select r.created_by, min(trim(p.name)),
+       lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g')), max(o.created_at)
+from public.orders o
+join public.rounds r on r.id=o.round_id
+join public.order_items oi on oi.order_id=o.id
+cross join lateral unnest(oi.participants) p(name)
+where length(trim(p.name)) between 2 and 100
+group by r.created_by, lower(regexp_replace(trim(p.name), '\\s+', ' ', 'g'))
+on conflict (created_by, normalized_name) do update
+set last_seen_at=greatest(public.employee_directory.last_seen_at, excluded.last_seen_at);
+
 -- Backfill stable owner IDs and participant IDs while retaining legacy name arrays for invoices.
 update public.orders o set employee_id=e.id
 from public.rounds r, public.employee_directory e
@@ -135,5 +148,76 @@ select distinct created_by,'أسماك الحوت','مأكولات بحرية'
 from public.rounds
 where created_by is not null
 on conflict (created_by, (lower(trim(name)))) do nothing;
+
+
+create table if not exists public.menu_item_requests (
+  id uuid primary key default gen_random_uuid(),
+  round_id uuid not null references public.rounds(id) on delete cascade,
+  restaurant_id uuid not null references public.restaurants(id) on delete cascade,
+  requested_name text not null check (length(trim(requested_name)) between 1 and 180),
+  normalized_name text not null,
+  requested_by_name text not null check (length(trim(requested_by_name)) between 2 and 100),
+  created_at timestamptz not null default now()
+);
+alter table public.menu_item_requests enable row level security;
+drop policy if exists "admin manages own menu item requests" on public.menu_item_requests;
+create policy "admin manages own menu item requests" on public.menu_item_requests
+for all to authenticated using (
+  exists(select 1 from public.rounds r where r.id=round_id and r.created_by=auth.uid())
+) with check (
+  exists(select 1 from public.rounds r where r.id=round_id and r.created_by=auth.uid())
+);
+grant select, delete on public.menu_item_requests to authenticated;
+
+-- The public round payload exposes only the selected restaurant's active menu and
+-- the admin's employee directory; it never exposes other rounds or orders.
+create or replace function public.get_public_round(p_token uuid)
+returns jsonb language sql stable security definer set search_path=public as $
+  select jsonb_build_object(
+    'id',r.id,'token',r.public_token,'title',r.title,'food_type',r.food_type,
+    'deadline',r.deadline,'status',r.status,'menu_path',r.menu_path,
+    'restaurant_id',r.restaurant_id,
+    'restaurant_name',coalesce(rest.name,''),
+    'menu_items',coalesce((
+      select jsonb_agg(jsonb_build_object('id',mi.id,'name',mi.name) order by mi.name)
+      from public.restaurant_menu_items mi
+      where mi.restaurant_id=r.restaurant_id and mi.active=true
+    ),'[]'::jsonb),
+    'employee_names',coalesce((
+      select jsonb_agg(ed.employee_name order by ed.employee_name)
+      from public.employee_directory ed where ed.created_by=r.created_by
+    ),'[]'::jsonb)
+  )
+  from public.rounds r
+  left join public.restaurants rest on rest.id=r.restaurant_id
+  where r.public_token=p_token and r.status='open' and (r.deadline is null or r.deadline>now())
+  limit 1;
+$;
+
+create or replace function public.request_menu_item(p_token uuid,p_requested_name text,p_employee_name text)
+returns uuid language plpgsql security definer set search_path=public as $
+declare
+  v_round public.rounds%rowtype;
+  v_id uuid;
+  v_name text:=trim(coalesce(p_requested_name,''));
+  v_employee text:=trim(coalesce(p_employee_name,''));
+begin
+  select * into v_round from public.rounds
+  where public_token=p_token and status='open' and (deadline is null or deadline>now())
+  for update;
+  if not found or v_round.restaurant_id is null then raise exception 'ROUND_CLOSED_OR_NOT_FOUND'; end if;
+  if length(v_name)<1 or length(v_name)>180 or length(v_employee)<2 or length(v_employee)>100 then
+    raise exception 'INVALID_MENU_REQUEST';
+  end if;
+  insert into public.menu_item_requests(round_id,restaurant_id,requested_name,normalized_name,requested_by_name)
+  values(v_round.id,v_round.restaurant_id,v_name,lower(regexp_replace(v_name,'\\s+',' ','g')),v_employee)
+  returning id into v_id;
+  return v_id;
+end;
+$;
+
+revoke all on function public.request_menu_item(uuid,text,text) from public;
+grant execute on function public.request_menu_item(uuid,text,text) to anon,authenticated;
+grant execute on function public.get_public_round(uuid) to anon,authenticated;
 
 commit;
