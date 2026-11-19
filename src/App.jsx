@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toPng } from 'html-to-image';
 import { QRCodeSVG } from 'qrcode.react';
 import { isConfigured, supabase } from './lib/supabase.js';
-import { aggregateItems, calculateBills, getParticipants, money } from './lib/billing.js';
+import { aggregateItems, calculateBills, cleanItemLabel, getParticipants, money, normalizeItemName } from './lib/billing.js';
 
 const dateLabel = value => value ? new Date(value).toLocaleString('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }) : 'بدون موعد إغلاق';
 const shortTime = value => value ? new Date(value).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -1398,9 +1398,9 @@ function RestaurantOrderSummary({ round }) {
     const map = new Map();
     for (const order of round.orders || []) {
       for (const item of order.order_items || order.items || []) {
-        const label = String(item.description || '').trim().replace(/\\s+/g, ' ');
+        const label = cleanItemLabel(item.description || '');
         if (!label) continue;
-        const key = label.toLocaleLowerCase('ar');
+        const key = normalizeItemName(label);
         const current = map.get(key) || { key, label, quantity: 0, employees: new Map() };
         const quantity = Math.max(1, Number(item.quantity) || 1);
         current.quantity += quantity;
