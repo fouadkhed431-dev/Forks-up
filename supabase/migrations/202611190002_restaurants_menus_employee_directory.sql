@@ -181,7 +181,7 @@ grant select, delete on public.menu_item_requests to authenticated;
 -- The public round payload exposes only the selected restaurant's active menu and
 -- the admin's employee directory; it never exposes other rounds or orders.
 create or replace function public.get_public_round(p_token uuid)
-returns jsonb language sql stable security definer set search_path=public as $
+returns jsonb language sql stable security definer set search_path=public as $get_public_round$
   select jsonb_build_object(
     'id',r.id,'token',r.public_token,'title',r.title,'food_type',r.food_type,
     'deadline',r.deadline,'status',r.status,'menu_path',r.menu_path,
@@ -201,10 +201,10 @@ returns jsonb language sql stable security definer set search_path=public as $
   left join public.restaurants rest on rest.id=r.restaurant_id
   where r.public_token=p_token and r.status='open' and (r.deadline is null or r.deadline>now())
   limit 1;
-$;
+$get_public_round$;
 
 create or replace function public.request_menu_item(p_token uuid,p_requested_name text,p_employee_name text)
-returns uuid language plpgsql security definer set search_path=public as $
+returns uuid language plpgsql security definer set search_path=public as $request_menu_item$
 declare
   v_round public.rounds%rowtype;
   v_id uuid;
@@ -223,7 +223,7 @@ begin
   returning id into v_id;
   return v_id;
 end;
-$;
+$request_menu_item$;
 
 revoke all on function public.request_menu_item(uuid,text,text) from public;
 grant execute on function public.request_menu_item(uuid,text,text) to anon,authenticated;
