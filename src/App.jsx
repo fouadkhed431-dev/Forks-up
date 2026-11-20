@@ -639,7 +639,8 @@ function App() {
         {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={async (restaurantId,menuId) => { let targetMenu=menuId||null; if(restaurantId&&!targetMenu){const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).order('created_at').limit(1).maybeSingle();if(e)throw e;targetMenu=data?.id||null;} await updateRound({restaurant_id:restaurantId,menu_id:targetMenu}); }} busy={busy}
           onCreateMenu={async name => {
             const {data,error:e}=await supabase.from('restaurant_menus').insert({restaurant_id:roundData.restaurant_id,name}).select().single();if(e)throw e;
-            const defaults=MENU_CATEGORIES.map((n,i)=>({menu_id:data.id,name:n,sort_order:i}));
+            const isBistro=restaurants.find(r=>r.id===roundData.restaurant_id)?.name?.trim().toLowerCase()==='bistro';
+            const defaults=(isBistro?BISTRO_MENU_CATEGORIES:MENU_CATEGORIES).map((n,i)=>({menu_id:data.id,name:n,sort_order:i}));
             const {error:ce}=await supabase.from('restaurant_menu_categories').insert(defaults);if(ce)throw ce;
             await updateRound({menu_id:data.id});await loadRound(roundData.id);flash('تم إنشاء المنيو وربطه بالجولة');
           }}
@@ -1593,6 +1594,7 @@ function EditOrder({ order, employeeNames = [], busy, onCancel, onSave }) {
 }
 
 const MENU_CATEGORIES = ['السلطات','الأرز والأطباق الجانبية','السمك','الجمبري','الطواجن','الوجبات','الشوربات','السندوتشات','أصناف أخرى'];
+const BISTRO_MENU_CATEGORIES = ['برجر لحم','برجر دجاج','سندوتشات الردة','حواوشي','وجبات','بيتزا','أصناف أخرى'];
 
 function RestaurantMenuPanel({round,restaurants=[],onAssign,busy,onAdd,onSaveItem,onDeleteItem,onImportRoundItems,onApprove,onDismiss,onCreateMenu,onRenameMenu,onDeleteMenu,onAddCategory,onRenameCategory,onDeleteCategory}) {
  const [newMenu,setNewMenu]=useState(''),[newCat,setNewCat]=useState(''),[name,setName]=useState(''),[category,setCategory]=useState('السمك'),[sub,setSub]=useState(''),[prep,setPrep]=useState(''),[weights,setWeights]=useState([]),[error,setError]=useState('');
