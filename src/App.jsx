@@ -1213,6 +1213,50 @@ function AdminCreateOrderDialog({ round, busy, onCreate }) {
   </dialog>;
 }
 
+function MenuItemPicker({ menuItems = [], item, onChange }) {
+  const selected = menuItems.find(row => row.name === item.description);
+  const [category, setCategory] = useState(selected?.category || '');
+  const [species, setSpecies] = useState(selected?.subcategory || '');
+  useEffect(() => {
+    if (selected) {
+      setCategory(selected.category || 'أصناف أخرى');
+      setSpecies(selected.subcategory || '');
+    }
+  }, [selected?.id]);
+  const categories = [...new Set(menuItems.map(row => row.category || 'أصناف أخرى'))]
+    .sort((a,b) => MENU_CATEGORIES.indexOf(a)-MENU_CATEGORIES.indexOf(b));
+  const inCategory = menuItems.filter(row => (row.category || 'أصناف أخرى') === category);
+  const speciesList = [...new Set(inCategory.map(row => row.subcategory).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  const choose = value => value === '__custom__'
+    ? onChange({ description: '', customRequest: true })
+    : onChange({ description: value, customRequest: false });
+  return <div style={{display:'grid',gap:8}}>
+    <select required value={category} onChange={e=>{setCategory(e.target.value);setSpecies('');onChange({description:'',customRequest:false});}}>
+      <option value="">اختر القسم</option>
+      {categories.map(value=><option key={value}>{value}</option>)}
+    </select>
+    {category === 'السمك' ? <>
+      <select required value={species} onChange={e=>{setSpecies(e.target.value);onChange({description:'',customRequest:false});}}>
+        <option value="">اختر نوع السمك</option>
+        {speciesList.map(value=><option key={value}>{value}</option>)}
+      </select>
+      <select required value={selected?.category === 'السمك' && selected.subcategory === species ? selected.name : ''} onChange={e=>choose(e.target.value)}>
+        <option value="">اختر طريقة التسوية</option>
+        {inCategory.filter(row=>row.subcategory===species).map(row=><option key={row.id} value={row.name}>{row.preparation || row.name}</option>)}
+        <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
+      </select>
+    </> : category === 'الجمبري' ? <select required value={selected?.category === 'الجمبري' ? selected.name : ''} onChange={e=>choose(e.target.value)}>
+      <option value="">اختر طريقة تحضير الجمبري</option>
+      {inCategory.map(row=><option key={row.id} value={row.name}>{row.preparation || row.name.replace(/^جمبري\s*[—-]?\s*/,'')}</option>)}
+      <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
+    </select> : <select required value={selected && selected.category === category ? selected.name : ''} onChange={e=>choose(e.target.value)}>
+      <option value="">اختر الصنف</option>
+      {inCategory.map(row=><option key={row.id} value={row.name}>{row.name}</option>)}
+      <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
+    </select>}
+  </div>;
+}
+
 function GuestPage({ token, onBack }) {
   const [round, setRound] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1362,11 +1406,7 @@ function GuestPage({ token, onBack }) {
               {items.length > 1 && <button type="button" className="remove-link" onClick={() => setItems(old => old.filter(x => x.key !== item.key))}>حذف</button>}
             </div>
 
-            {round.menu_items?.length ? <select required value={item.customRequest ? '__custom__' : item.description} onChange={e => e.target.value === '__custom__' ? patchItem(item.key, { description: '', customRequest: true }) : patchItem(item.key, { description: e.target.value, customRequest: false })}>
-              <option value="">اختر صنفاً من المنيو</option>
-              {[...new Set(round.menu_items.map(menuItem => menuItem.category || 'أصناف أخرى'))].sort((a,b)=>MENU_CATEGORIES.indexOf(a)-MENU_CATEGORIES.indexOf(b)).map(section=><optgroup key={section} label={section}>{round.menu_items.filter(menuItem=>(menuItem.category || 'أصناف أخرى')===section).map(menuItem=><option key={menuItem.id} value={menuItem.name}>{menuItem.name}</option>)}</optgroup>)}
-              <option value="__custom__">الصنف غير موجود — اكتب طلب إضافة</option>
-            </select> : <input required value={item.description} maxLength="180" onChange={e => patchItem(item.key, { description: e.target.value })} placeholder="مثلاً: سمك مشوي، أرز صيادية..." />}
+            {round.menu_items?.length ? <MenuItemPicker menuItems={round.menu_items} item={item} onChange={patch=>patchItem(item.key,patch)} /> : <input required value={item.description} maxLength="180" onChange={e => patchItem(item.key, { description: e.target.value })} placeholder="مثلاً: سمك مشوي، أرز صيادية..." />}
             {item.customRequest && <input required value={item.description} maxLength="180" placeholder="اكتب اسم الصنف المطلوب" onChange={e => patchItem(item.key, { description: e.target.value })} />}
             {item.customRequest && item.description.trim() && <button type="button" className="secondary small-btn" onClick={async () => {
               const { error: requestError } = await supabase.rpc('request_menu_item', { p_token: token, p_requested_name: item.description.trim(), p_employee_name: name.trim() });
