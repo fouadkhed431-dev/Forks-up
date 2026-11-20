@@ -58,3 +58,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .guest-wrap.theme-pizza{--theme-ink:#75402e;--theme-accent:#a64d3c;--theme-paper:#f8f0e8;--theme-card:#fffdf8;--theme-soft:#f8eee4;--theme-line:#ead8c8}
 .guest-wrap.theme-grill{--theme-ink:#593a2d;--theme-accent:#bd713b;--theme-paper:#f2e9df;--theme-card:#fffaf4;--theme-soft:#f5ece2;--theme-line:#e5d4c3}
 .guest-wrap.theme-general{--theme-ink:#173c35;--theme-accent:#c07b2e;--theme-paper:#f3ebdd;--theme-card:#fffefa;--theme-soft:#faf8f2;--theme-line:#e8e2d5}
+
+
+/* Make the selected round identity unmistakable on the employee ordering page. */
+.guest-theme-banner{width:min(100%,560px);display:flex;align-items:center;gap:12px;padding:13px 16px;margin:-7px 0 16px;border:1px solid var(--theme-line);border-inline-start:5px solid var(--theme-accent);border-radius:13px;background:var(--theme-card);color:var(--theme-ink);box-shadow:0 5px 18px #26352b0b}
+.guest-theme-icon{width:43px;height:43px;display:grid;place-items:center;flex:0 0 43px;border-radius:12px;background:var(--theme-soft);font-size:23px}
+.guest-theme-banner b{display:block;font-size:13px;font-weight:900}
+.guest-theme-banner small{display:block;margin-top:2px;color:var(--theme-ink);opacity:.72;font-size:10px;line-height:1.5}
+.guest-theme-tag{margin-inline-start:auto;padding:5px 9px;border-radius:30px;background:var(--theme-soft);color:var(--theme-ink);font-size:9px;font-weight:800;white-space:nowrap}
+.guest-wrap.theme-seafood .guest-theme-banner{background:linear-gradient(110deg,#faffff,#dceff1)}
+.guest-wrap.theme-bistro .guest-theme-banner{background:linear-gradient(110deg,#fffdf8,#f5e5d1)}
+.guest-wrap.theme-pizza .guest-theme-banner{background:linear-gradient(110deg,#fffdf8,#f6e2d4)}
+.guest-wrap.theme-grill .guest-theme-banner{background:linear-gradient(110deg,#fffaf4,#ead8c5)}
+.guest-wrap.theme-general .guest-theme-banner{background:linear-gradient(110deg,#fffefa,#e9f0e8)}
+@media(max-width:420px){.guest-theme-banner{padding:11px 12px;gap:9px}.guest-theme-icon{width:38px;height:38px;flex-basis:38px}.guest-theme-tag{font-size:8px;padding:5px 7px}.guest-theme-banner small{font-size:9px}}
