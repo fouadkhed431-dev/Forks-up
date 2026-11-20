@@ -72,3 +72,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .guest-wrap.theme-grill .guest-theme-banner{background:linear-gradient(110deg,#fffaf4,#ead8c5)}
 .guest-wrap.theme-general .guest-theme-banner{background:linear-gradient(110deg,#fffefa,#e9f0e8)}
 @media(max-width:420px){.guest-theme-banner{padding:11px 12px;gap:9px}.guest-theme-icon{width:38px;height:38px;flex-basis:38px}.guest-theme-tag{font-size:8px;padding:5px 7px}.guest-theme-banner small{font-size:9px}}
+
+
+/* Safe decorative food photography: paint only, no layout/position/stacking changes. */
+.guest-wrap.theme-seafood{
+  background-image:linear-gradient(rgba(234,244,245,.78),rgba(234,244,245,.84)),url('https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1600&q=75');
+  background-position:center top;background-size:cover;background-repeat:no-repeat;
+}
+.guest-wrap.theme-bistro{
+  background-image:linear-gradient(rgba(244,238,229,.80),rgba(244,238,229,.86)),url('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=75');
+  background-position:center top;background-size:cover;background-repeat:no-repeat;
+}
+.guest-wrap.theme-pizza{
+  background-image:linear-gradient(rgba(248,240,232,.80),rgba(248,240,232,.86)),url('https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=75');
+  background-position:center top;background-size:cover;background-repeat:no-repeat;
+}
+.guest-wrap.theme-grill{
+  background-image:linear-gradient(rgba(242,233,223,.80),rgba(242,233,223,.86)),url('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=75');
+  background-position:center top;background-size:cover;background-repeat:no-repeat;
+}
+.guest-wrap.theme-general{
+  background-image:linear-gradient(rgba(243,235,221,.82),rgba(243,235,221,.88)),url('https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1600&q=75');
+  background-position:center top;background-size:cover;background-repeat:no-repeat;
+}
