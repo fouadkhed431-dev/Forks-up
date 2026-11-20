@@ -635,7 +635,7 @@ function App() {
           onToggle={() => updateRound({ status: roundData.status === 'open' ? 'closed' : 'open' })}
         />}
 
-        {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={async (restaurantId,menuId) => { await updateRound({restaurant_id:restaurantId,menu_id:menuId||null}); }} busy={busy}
+        {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={async (restaurantId,menuId) => { let targetMenu=menuId||null; if(restaurantId&&!targetMenu){const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).order('created_at').limit(1).maybeSingle();if(e)throw e;targetMenu=data?.id||null;} await updateRound({restaurant_id:restaurantId,menu_id:targetMenu}); }} busy={busy}
           onCreateMenu={async name => {
             const {data,error:e}=await supabase.from('restaurant_menus').insert({restaurant_id:roundData.restaurant_id,name}).select().single();if(e)throw e;
             const defaults=MENU_CATEGORIES.map((n,i)=>({menu_id:data.id,name:n,sort_order:i}));
