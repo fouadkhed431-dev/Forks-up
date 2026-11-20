@@ -468,18 +468,36 @@ function App() {
     setBusy(true);
     setError('');
     try {
-      const { error: saveError } = await supabase.rpc('admin_update_employee', {
-        p_employee_id: employee.id,
-        p_employee_name: employee.employee_name.trim(),
-        p_category: (employee.category || '').trim(),
-        p_sort_order: Math.max(0, Number(employee.sort_order) || 0)
-      });
-      if (saveError) throw saveError;
+      const original = employees.find(row => row.id === employee.id);
+      const nextOrder = Math.max(0, Math.min(9999, Math.trunc(Number(employee.sort_order) || 0)));
+      // Save order directly so order-only edits do not depend on the rename RPC.
+      const { data: orderRow, error: orderError } = await supabase
+        .from('employee_directory')
+        .update({ sort_order: nextOrder })
+        .eq('id', employee.id)
+        .select('id')
+        .maybeSingle();
+      if (orderError) throw orderError;
+      if (!orderRow) throw new Error('لم يتم حفظ الترتيب. تحقق من صلاحيات المسؤول أو نفّذ تحديث قاعدة البيانات الخاص بإدارة الموظفين.');
+
+      const nameChanged = employee.employee_name.trim() !== (original?.employee_name || '').trim();
+      const categoryChanged = (employee.category || '').trim() !== (original?.category || '').trim();
+      if (nameChanged || categoryChanged) {
+        const { error: saveError } = await supabase.rpc('admin_update_employee', {
+          p_employee_id: employee.id,
+          p_employee_name: employee.employee_name.trim(),
+          p_category: (employee.category || '').trim(),
+          p_sort_order: nextOrder
+        });
+        if (saveError) throw saveError;
+      }
       await loadEmployees();
-      if (activeId) await loadRound(activeId);
-      flash('تم حفظ بيانات الموظف وتحديث اسمه في السجلات السابقة');
-    } catch (err) { report(err); }
-    finally { setBusy(false); }
+      if (activeId && (nameChanged || categoryChanged)) await loadRound(activeId);
+      flash(nameChanged || categoryChanged ? 'تم حفظ بيانات الموظف وتحديث الاسم في السجلات السابقة' : 'تم حفظ ترتيب الموظف');
+    } catch (err) {
+      await loadEmployees().catch(() => {});
+      report(err);
+    } finally { setBusy(false); }
   };
 
   const moveEmployee = async (employee, direction) => {
