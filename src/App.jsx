@@ -485,17 +485,15 @@ function App() {
   const moveEmployee = async (employee, direction) => {
     const group = employees.filter(row => (row.category || '') === (employee.category || '')).sort((a,b) => (a.sort_order || 0)-(b.sort_order || 0));
     const index = group.findIndex(row => row.id === employee.id);
-    const target = group[index + direction];
-    if (!target) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= group.length) return;
+    const reordered = [...group];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
     setBusy(true);
     try {
-      const employeeOrder = Number(employee.sort_order) || 0;
-      const targetOrder = Number(target.sort_order) || 0;
-      const updates = [
-        supabase.from('employee_directory').update({sort_order: targetOrder}).eq('id', employee.id),
-        supabase.from('employee_directory').update({sort_order: employeeOrder}).eq('id', target.id)
-      ];
-      const results = await Promise.all(updates);
+      const results = await Promise.all(reordered.map((row, position) =>
+        supabase.from('employee_directory').update({sort_order: position}).eq('id', row.id)
+      ));
       const failed = results.find(result => result.error);
       if (failed) throw failed.error;
       await loadEmployees();
