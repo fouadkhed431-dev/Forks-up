@@ -32,11 +32,11 @@ const resolveTheme = round => {
 };
 
 const THEME_PRESENTATION = {
-  seafood: { label: 'Straight from the sea, with a little wow! 🌊', icon: '🦐', note: "Fun fact: A shrimp's heart is actually located in its head." },
-  bistro: { label: 'Stacked with Flavor. Loaded with Happiness. 🍔', icon: '🍔', note: 'Fun fact: The modern hamburger became popular in the United States in the late 1800s — but its exact inventor is still debated!' },
-  pizza: { label: 'A Little Slice of Food Science. 🍕', icon: '🍕', note: 'Mozzarella’s famous cheese pull comes from its stretchy protein network.' },
-  grill: { label: 'Where Fire Turns Into Flavor. 🔥', icon: '🥩', note: 'High-heat browning creates hundreds of delicious new flavor compounds.' },
-  general: { label: 'Good Food. Great Company. 🍽️', icon: '🍽️', note: 'Your sense of smell does a huge part of the work behind every flavor.' }
+  seafood: { label: 'Straight from the sea, with a little wow!', icon: '🦐', note: "Fun fact: A shrimp's heart is actually located in its head." },
+  bistro: { label: 'Stacked with Flavor. Loaded with Happiness', icon: '🍔', note: 'Fun fact: The modern hamburger became popular in the United States in the late 1800s — but its exact inventor is still debated!' },
+  pizza: { label: 'A Little Slice of Food Science', icon: '🍕', note: 'Mozzarella’s famous cheese pull comes from its stretchy protein network.' },
+  grill: { label: 'Where Fire Turns Into Flavor', icon: '🥩', note: 'High-heat browning creates hundreds of delicious new flavor compounds.' },
+  general: { label: 'Good Food. Great Company', icon: '🍽️', note: 'Your sense of smell does a huge part of the work behind every flavor.' }
 };
 
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
