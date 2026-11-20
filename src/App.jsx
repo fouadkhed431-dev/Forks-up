@@ -1285,10 +1285,10 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
       <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
     </select> : <select required value={selected && selected.category === category ? selected.name : ''} onChange={e=>choose(e.target.value)}>
       <option value="">اختر الصنف</option>
-      {inCategory.map(row=><option key={row.id} value={row.name}>{row.name}{priceLabel(row)?' — '+priceLabel(row):''}</option>)}
+      {inCategory.map(row=><option key={row.id} value={row.name}>{row.name}</option>)}
       <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
     </select>}
-    {selected?.weight_options?.length > 0 && <label>{selected.weight_options.includes('Single') ? 'اختيار البرجر' : 'الوزن / الحجم'}
+    {selected?.weight_options?.length > 0 && <label>{selected.weight_options.includes('Single') ? 'اختر حجم البرجر' : 'الوزن / الحجم'}
       <select required value={item.variant || ''} onChange={e=>onChange({variant:e.target.value})}>
         <option value="">اختر {selected.weight_options.includes('Single') ? 'الحجم' : 'الوزن'}</option>
         {selected.weight_options.map(weight=><option key={weight} value={weight}>{weight}{weight==='Single'&&selected.single_price!=null?` — ${selected.single_price} ج`:weight==='Double'&&selected.double_price!=null?` — ${selected.double_price} ج`:''}</option>)}
