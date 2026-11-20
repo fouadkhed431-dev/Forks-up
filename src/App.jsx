@@ -31,6 +31,14 @@ const resolveTheme = round => {
   return 'general';
 };
 
+const THEME_PRESENTATION = {
+  seafood: { label: 'هوية بحرية', icon: '🐟', note: 'ألوان مستوحاة من البحر والمأكولات البحرية' },
+  bistro: { label: 'هوية Bistro', icon: '🍔', note: 'طابع دافئ يناسب البرجر والسندوتشات' },
+  pizza: { label: 'هوية البيتزا', icon: '🍕', note: 'ألوان دافئة مستوحاة من المطبخ الإيطالي' },
+  grill: { label: 'هوية المشويات', icon: '🔥', note: 'طابع ترابي دافئ للمشويات' },
+  general: { label: 'هوية Forks Up', icon: '🍽️', note: 'التصميم الكلاسيكي للتطبيق' }
+};
+
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
   description: [item.description.trim(), item.variant].filter(Boolean).join(' — '),
   quantity: Math.max(1, Math.min(99, Number(item.quantity) || 1)),
@@ -1488,7 +1496,9 @@ function GuestPage({ token, onBack }) {
   }, [token]);
 
   const menuPaths = round?.menu_paths?.length ? round.menu_paths : (round?.menu_path ? [round.menu_path] : []);
-  const themeClass = `theme-${resolveTheme(round)}`;
+  const resolvedTheme = resolveTheme(round);
+  const themeClass = `theme-${resolvedTheme}`;
+  const themePresentation = THEME_PRESENTATION[resolvedTheme] || THEME_PRESENTATION.general;
   const menuUrls = menuPaths.map(path => ({ path, url: supabase.storage.from('round-menus').getPublicUrl(path).data.publicUrl }));
 
   const closed = !round || round.status !== 'open' ||
@@ -1565,6 +1575,7 @@ function GuestPage({ token, onBack }) {
   if (sent) {
     return <div className={`guest-wrap ${themeClass}`}>
       <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div><span className="guest-theme-tag">هوية الجولة</span></div>
       <div className="guest-card card success-card">
         <div className="success-icon">✓</div>
         <h1>طلبك وصل!</h1>
@@ -1576,6 +1587,7 @@ function GuestPage({ token, onBack }) {
 
   return <div className={`guest-wrap ${themeClass}`}>
     <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div><span className="guest-theme-tag">هوية الجولة</span></div>
 
     <div className="guest-card card">
       {!round || closed ? <>
