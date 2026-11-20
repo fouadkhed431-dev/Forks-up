@@ -759,7 +759,7 @@ function App() {
                 <input type="checkbox" checked={visible} disabled={busy} onChange={e=>{
                   const current=roundData.visible_menu_categories==null?allNames:roundData.visible_menu_categories;
                   const next=e.target.checked?[...new Set([...current,category.name])]:current.filter(name=>name!==category.name);
-                  updateRound({visible_menu_categories:next.length===allNames.length?null:next});
+                  updateRound({visible_menu_categories:next.length===0||next.length===allNames.length?null:next});
                 }}/>
                 {category.name}
               </label>;
