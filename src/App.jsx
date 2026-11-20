@@ -489,9 +489,11 @@ function App() {
     if (!target) return;
     setBusy(true);
     try {
+      const employeeOrder = Number(employee.sort_order) || 0;
+      const targetOrder = Number(target.sort_order) || 0;
       const updates = [
-        supabase.from('employee_directory').update({sort_order: target.sort_order ?? index}).eq('id', employee.id),
-        supabase.from('employee_directory').update({sort_order: employee.sort_order ?? index+direction}).eq('id', target.id)
+        supabase.from('employee_directory').update({sort_order: targetOrder}).eq('id', employee.id),
+        supabase.from('employee_directory').update({sort_order: employeeOrder}).eq('id', target.id)
       ];
       const results = await Promise.all(updates);
       const failed = results.find(result => result.error);
