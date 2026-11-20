@@ -38,9 +38,9 @@ where rd.menu_id is null and rd.restaurant_id is not null;
 -- Allow the same dish in more than one named menu.
 alter table public.restaurant_menu_items
   drop constraint if exists restaurant_menu_items_restaurant_id_normalized_name_key;
+alter table public.restaurant_menu_items alter column menu_id set not null;
 create unique index if not exists restaurant_menu_items_menu_normalized_uidx
-  on public.restaurant_menu_items(menu_id, normalized_name)
-  where menu_id is not null;
+  on public.restaurant_menu_items(menu_id, normalized_name);
 
 insert into public.restaurant_menu_categories(menu_id,name,sort_order)
 select m.id, c.name, c.ord
