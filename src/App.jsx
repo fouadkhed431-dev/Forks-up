@@ -11,7 +11,7 @@ const isRoundOpen = round => round?.status === 'open' && (!round.deadline || new
 const publicUrl = token => `${window.location.origin}${window.location.pathname}?token=${encodeURIComponent(token)}`;
 
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
-  description: item.description.trim(),
+  description: [item.description.trim(), item.variant].filter(Boolean).join(' — '),
   quantity: Math.max(1, Math.min(99, Number(item.quantity) || 1)),
   kind: item.kind === 'shared' ? 'shared' : 'individual',
   participants: item.kind === 'shared' ? [...new Set((item.participants || []).map(name => name.trim()).filter(Boolean))] : []
@@ -294,6 +294,12 @@ function App() {
     let createdRoundId = null;
 
     try {
+      let selectedMenuId = form.menuId || null;
+      if (!selectedMenuId && form.restaurantId) {
+        const { data: defaultMenu, error: menuLookupError } = await supabase.from('restaurant_menus').select('id').eq('restaurant_id', form.restaurantId).order('created_at').limit(1).maybeSingle();
+        if (menuLookupError) throw menuLookupError;
+        selectedMenuId = defaultMenu?.id || null;
+      }
       if (form.file && form.file.size > 10 * 1024 * 1024) {
         throw new Error('حجم المنيو يجب ألا يتجاوز 10 ميجابايت.');
       }
@@ -1205,8 +1211,8 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
   const inCategory = menuItems.filter(row => (row.category || 'أصناف أخرى') === category);
   const speciesList = [...new Set(inCategory.map(row => row.subcategory).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
   const choose = value => value === '__custom__'
-    ? onChange({ description: '', customRequest: true })
-    : onChange({ description: value, customRequest: false });
+    ? onChange({ description: '', customRequest: true, variant: '' })
+    : onChange({ description: value, customRequest: false, variant: '' });
   return <div style={{display:'grid',gap:8}}>
     <select required value={category} onChange={e=>{setCategory(e.target.value);setSpecies('');onChange({description:'',customRequest:false});}}>
       <option value="">اختر القسم</option>
@@ -1231,6 +1237,12 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
       {inCategory.map(row=><option key={row.id} value={row.name}>{row.name}</option>)}
       <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
     </select>}
+    {selected?.weight_options?.length > 0 && <label>الوزن / الحجم
+      <select required value={item.variant || ''} onChange={e=>onChange({variant:e.target.value})}>
+        <option value="">اختر الوزن</option>
+        {selected.weight_options.map(weight=><option key={weight}>{weight}</option>)}
+      </select>
+    </label>}
   </div>;
 }
 
