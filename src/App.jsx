@@ -10,6 +10,27 @@ const shortTime = value => value ? new Date(value).toLocaleTimeString('ar-EG', {
 const isRoundOpen = round => round?.status === 'open' && (!round.deadline || new Date(round.deadline).getTime() > Date.now());
 const publicUrl = token => `${window.location.origin}${window.location.pathname}?token=${encodeURIComponent(token)}`;
 
+const THEME_OPTIONS = [
+  { value: 'auto', label: 'تلقائي حسب المطعم ونوع الطعام' },
+  { value: 'seafood', label: 'بحري — أسماك ومأكولات بحرية' },
+  { value: 'bistro', label: 'Bistro — برجر وسندوتشات' },
+  { value: 'pizza', label: 'بيتزا' },
+  { value: 'grill', label: 'مشويات' },
+  { value: 'general', label: 'Forks Up — الكلاسيكي' }
+];
+
+const resolveTheme = round => {
+  const selected = round?.theme_key || 'auto';
+  if (selected !== 'auto') return selected;
+  const restaurant = String(round?.restaurant_name || '').toLocaleLowerCase('ar');
+  const food = String(round?.food_type || '').toLocaleLowerCase('ar');
+  if (restaurant.includes('أسماك') || restaurant.includes('الحوت') || /سمك|جمبري|بحر|مأكولات بحرية/.test(food)) return 'seafood';
+  if (restaurant.includes('bistro') || /برجر|سندوتش|ساندوتش|هوت دوج/.test(food)) return 'bistro';
+  if (/بيتزا|pizza/.test(food)) return 'pizza';
+  if (/مشوي|كباب|كفتة|فراخ مشوية|شواية/.test(food)) return 'grill';
+  return 'general';
+};
+
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
   description: [item.description.trim(), item.variant].filter(Boolean).join(' — '),
   quantity: Math.max(1, Math.min(99, Number(item.quantity) || 1)),
@@ -354,7 +375,8 @@ function App() {
         restaurant_id: form.restaurantId || null,
         menu_id: selectedMenuId,
         deadline: form.deadline || null,
-        status: 'open'
+        status: 'open',
+        theme_key: form.themeKey || 'auto'
       }).select().single();
 
       if (insertError) throw insertError;
@@ -406,6 +428,7 @@ function App() {
       title: roundData.title ? `نسخة من ${roundData.title}` : 'جولة مكررة',
       restaurantId: roundData.restaurant_id || '',
       deadline: null,
+      themeKey: roundData.theme_key || 'auto',
       file: null
     });
   };
@@ -710,6 +733,13 @@ function App() {
             <button type="button" className="text-btn" disabled={busy} onClick={duplicateRound}>تكرار الجولة</button>
             <button type="button" className="text-btn danger" disabled={busy} onClick={deleteRound}>حذف الجولة</button>
           </div>
+        </div>
+
+        <div className="theme-admin-control card" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,padding:'12px 16px',marginBottom:16,flexWrap:'wrap'}}>
+          <div><b>هوية الجولة للموظفين</b><small className="muted" style={{display:'block'}}>التلقائي يختار التصميم حسب المطعم ونوع الطعام، ويمكنك تثبيت تصميم محدد.</small></div>
+          <select aria-label="ثيم الجولة" value={roundData.theme_key || 'auto'} disabled={busy} onChange={e=>updateRound({theme_key:e.target.value})} style={{minWidth:220,border:'1px solid #dedacf',borderRadius:8,padding:'9px 12px',background:'#fffefa'}}>
+            {THEME_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
         </div>
 
         <div className="summary-grid">
@@ -1114,6 +1144,7 @@ function ParticipantsDialog({ participants }) {
 
 function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [] }) {
   const [foodType, setFoodType] = useState('');
+  const [themeKey, setThemeKey] = useState('auto');
   const [restaurantId, setRestaurantId] = useState('');
   const [newRestaurantName, setNewRestaurantName] = useState('');
   const [restaurantError, setRestaurantError] = useState('');
@@ -1134,6 +1165,7 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
     const created = await onCreate({
       foodType,
       restaurantId,
+      themeKey,
       title,
       deadline: deadline ? new Date(deadline).toISOString() : null,
       files
@@ -1141,6 +1173,7 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
 
     if (created) {
       setFoodType('');
+      setThemeKey('auto');
       setTitle('');
       setDeadline('');
       setFiles([]);
@@ -1168,6 +1201,12 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
       {restaurantError && <small className="inline-error">{restaurantError}</small>}
       <label>نوع الطعام</label>
       <input required maxLength="80" placeholder="مثلاً: مأكولات بحرية، برجر، بيتزا..." value={foodType} onChange={e => setFoodType(e.target.value)} />
+
+      <label>تصميم الجولة للموظفين</label>
+      <select value={themeKey} onChange={e=>setThemeKey(e.target.value)}>
+        {THEME_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <small className="hint">يمكنك تركه تلقائيًا أو اختيار هوية ثابتة تناسب المطعم.</small>
 
       <label>اسم اختياري للجولة</label>
       <input maxLength="100" placeholder="مثلاً: غداء يوم الثلاثاء" value={title} onChange={e => setTitle(e.target.value)} />
@@ -1453,6 +1492,7 @@ function GuestPage({ token, onBack }) {
   }, [token]);
 
   const menuPaths = round?.menu_paths?.length ? round.menu_paths : (round?.menu_path ? [round.menu_path] : []);
+  const themeClass = `theme-${resolveTheme(round)}`;
   const menuUrls = menuPaths.map(path => ({ path, url: supabase.storage.from('round-menus').getPublicUrl(path).data.publicUrl }));
 
   const closed = !round || round.status !== 'open' ||
@@ -1527,7 +1567,7 @@ function GuestPage({ token, onBack }) {
   }
 
   if (sent) {
-    return <div className="guest-wrap">
+    return <div className={`guest-wrap ${themeClass}`}>
       <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
       <div className="guest-card card success-card">
         <div className="success-icon">✓</div>
@@ -1538,7 +1578,7 @@ function GuestPage({ token, onBack }) {
     </div>;
   }
 
-  return <div className="guest-wrap">
+  return <div className={`guest-wrap ${themeClass}`}>
     <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
 
     <div className="guest-card card">
