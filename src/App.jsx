@@ -33,7 +33,7 @@ const resolveTheme = round => {
 
 const THEME_PRESENTATION = {
   seafood: { label: 'Straight from the sea, with a little wow! 🌊', icon: '🦐', note: "Fun fact: A shrimp's heart is actually located in its head." },
-  bistro: { label: 'The Sizzle Is Science. 🍔', icon: '🍔', note: 'That crave-worthy browned crust? It’s the Maillard reaction at work.' },
+  bistro: { label: 'Big Bites. Bold Flavors. Burger Bliss. 🍔', icon: '🍔', note: 'Fun fact: That delicious golden-brown burger crust is created by the Maillard reaction — the same flavor magic behind toasted bread.' },
   pizza: { label: 'A Little Slice of Food Science. 🍕', icon: '🍕', note: 'Mozzarella’s famous cheese pull comes from its stretchy protein network.' },
   grill: { label: 'Where Fire Turns Into Flavor. 🔥', icon: '🥩', note: 'High-heat browning creates hundreds of delicious new flavor compounds.' },
   general: { label: 'Good Food. Great Company. 🍽️', icon: '🍽️', note: 'Your sense of smell does a huge part of the work behind every flavor.' }
