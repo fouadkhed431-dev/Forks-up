@@ -36,3 +36,25 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+
+/* Restaurant-inspired guest round themes. The Forks Up brand mark stays unchanged. */
+.guest-wrap{--theme-ink:#173c35;--theme-accent:#c07b2e;--theme-paper:#f3ebdd;--theme-card:#fffefa;--theme-soft:#faf8f2;--theme-line:#e8e2d5;background:var(--theme-paper)}
+.guest-wrap .guest-card{background:var(--theme-card);border-color:var(--theme-line)}
+.guest-wrap .guest-brand,.guest-wrap .guest-card h1,.guest-wrap .items-title,.guest-wrap .item-top{color:var(--theme-ink)}
+.guest-wrap .eyebrow{color:var(--theme-accent)}
+.guest-wrap .primary{background:var(--theme-ink)}
+.guest-wrap .primary:hover{filter:brightness(1.12)}
+.guest-wrap .guest-item{background:var(--theme-soft);border-color:var(--theme-line)}
+.guest-wrap .add-item{background:var(--theme-soft);border-color:var(--theme-accent);color:var(--theme-ink)}
+.guest-wrap .menu-link{background:var(--theme-soft);color:var(--theme-ink);border:1px solid var(--theme-line)}
+.guest-wrap .deadline-note{background:var(--theme-soft);color:var(--theme-ink);border-inline-start:4px solid var(--theme-accent)}
+.guest-wrap .success-icon{background:var(--theme-soft);color:var(--theme-ink)}
+.guest-wrap input:focus,.guest-wrap select:focus{border-color:var(--theme-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--theme-accent) 16%,transparent)}
+.guest-wrap.theme-seafood{--theme-ink:#123f50;--theme-accent:#e27b55;--theme-paper:#eaf4f5;--theme-card:#fbffff;--theme-soft:#eaf5f6;--theme-line:#cfe2e5}
+.guest-wrap.theme-seafood .guest-card{background-image:radial-gradient(ellipse at 95% 0%,#b8dfe455,transparent 38%)}
+.guest-wrap.theme-bistro{--theme-ink:#34302b;--theme-accent:#df873d;--theme-paper:#f4eee5;--theme-card:#fffdf8;--theme-soft:#f7eee2;--theme-line:#e7d8c5}
+.guest-wrap.theme-bistro .guest-card{background-image:radial-gradient(ellipse at 100% 0%,#edc18b44,transparent 40%)}
+.guest-wrap.theme-pizza{--theme-ink:#75402e;--theme-accent:#a64d3c;--theme-paper:#f8f0e8;--theme-card:#fffdf8;--theme-soft:#f8eee4;--theme-line:#ead8c8}
+.guest-wrap.theme-grill{--theme-ink:#593a2d;--theme-accent:#bd713b;--theme-paper:#f2e9df;--theme-card:#fffaf4;--theme-soft:#f5ece2;--theme-line:#e5d4c3}
+.guest-wrap.theme-general{--theme-ink:#173c35;--theme-accent:#c07b2e;--theme-paper:#f3ebdd;--theme-card:#fffefa;--theme-soft:#faf8f2;--theme-line:#e8e2d5}
