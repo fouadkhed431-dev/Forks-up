@@ -97,8 +97,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .guest-wrap .guest-brand .brand small,
 .guest-wrap .guest-brand>span{color:var(--theme-ink)}
 .guest-wrap .guest-theme-banner{
-  background:var(--theme-card)!important;
-  background-image:none!important;
+  background:linear-gradient(110deg,var(--theme-card),var(--theme-soft));
   color:var(--theme-ink);
   box-shadow:0 5px 18px rgba(30,40,35,.10);
 }
@@ -106,7 +105,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .guest-wrap .guest-theme-banner small,
 .guest-wrap .guest-theme-tag{color:var(--theme-ink)}
 .guest-wrap .guest-card{
-  background:rgba(255,254,250,.84)!important;
+  background:rgba(255,254,250,.88)!important;
   -webkit-backdrop-filter:blur(5px);
   backdrop-filter:blur(5px);
 }
