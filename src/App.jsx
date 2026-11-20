@@ -313,6 +313,7 @@ function App() {
         title: form.title.trim(),
         food_type: form.foodType.trim(),
         restaurant_id: form.restaurantId || null,
+        menu_id: selectedMenuId,
         deadline: form.deadline || null,
         status: 'open'
       }).select().single();
