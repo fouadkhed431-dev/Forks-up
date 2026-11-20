@@ -1594,7 +1594,7 @@ function GuestPage({ token, onBack }) {
   if (sent) {
     return <div className={`guest-wrap ${themeClass}`}>
       <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
-      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>&quot;{themePresentation.label}&quot;</b><small>{themePresentation.note}</small></div></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div></div>
       <div className="guest-card card success-card">
         <div className="success-icon">✓</div>
         <h1>طلبك وصل!</h1>
@@ -1606,7 +1606,7 @@ function GuestPage({ token, onBack }) {
 
   return <div className={`guest-wrap ${themeClass}`}>
     <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
-      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>&quot;{themePresentation.label}&quot;</b><small>{themePresentation.note}</small></div></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div></div>
 
     <div className="guest-card card">
       {!round || closed ? <>
