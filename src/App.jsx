@@ -1426,9 +1426,6 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
   const choose = value => value === '__custom__'
     ? onChange({ description: '', customRequest: true, variant: '' })
     : onChange({ description: value, customRequest: false, variant: '' });
-  const priceLabel = row => row.weight_options?.includes('Single') && row.weight_options?.includes('Double')
-    ? `سنجل ${row.single_price ?? '—'} / دبل ${row.double_price ?? '—'} ج`
-    : row.default_price != null ? `${row.default_price} ج` : '';
   return <div style={{display:'grid',gap:8}}>
     <select required value={category} onChange={e=>{setCategory(e.target.value);setSpecies('');onChange({description:'',customRequest:false});}}>
       <option value="">اختر القسم</option>
@@ -1456,10 +1453,9 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
     {selected?.weight_options?.length > 0 && <label>{selected.weight_options.includes('Single') ? 'اختر حجم البرجر' : 'الوزن / الحجم'}
       <select required value={item.variant || ''} onChange={e=>onChange({variant:e.target.value})}>
         <option value="">اختر {selected.weight_options.includes('Single') ? 'الحجم' : 'الوزن'}</option>
-        {selected.weight_options.map(weight=><option key={weight} value={weight}>{weight}{weight==='Single'&&selected.single_price!=null?` — ${selected.single_price} ج`:weight==='Double'&&selected.double_price!=null?` — ${selected.double_price} ج`:''}</option>)}
+        {selected.weight_options.map(weight=><option key={weight} value={weight}>{weight}</option>)}
       </select>
     </label>}
-    {selected && priceLabel(selected) && !selected.weight_options?.includes('Single') && <small className="muted">سعر القائمة: {priceLabel(selected)}</small>}
   </div>;
 }
 
