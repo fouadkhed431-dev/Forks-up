@@ -338,12 +338,13 @@ function App() {
           selectedMenuId = defaultMenu?.id || null;
         }
       }
-      if (form.file && form.file.size > 10 * 1024 * 1024) {
-        throw new Error('حجم المنيو يجب ألا يتجاوز 10 ميجابايت.');
-      }
-
-      if (form.file && !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(form.file.type)) {
-        throw new Error('صيغة المنيو غير مدعومة. استخدم صورة JPG أو PNG أو WEBP أو ملف PDF.');
+      const menuFiles = Array.isArray(form.files) ? form.files : (form.file ? [form.file] : []);
+      if (menuFiles.length > 12) throw new Error('يمكنك إضافة 12 ملفًا كحد أقصى.');
+      for (const file of menuFiles) {
+        if (file.size > 10 * 1024 * 1024) throw new Error(`حجم الملف "${file.name}" يجب ألا يتجاوز 10 ميجابايت.`);
+        if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
+          throw new Error(`صيغة الملف "${file.name}" غير مدعومة. استخدم JPG أو PNG أو WEBP أو PDF.`);
+        }
       }
 
       const { data, error: insertError } = await supabase.from('rounds').insert({
@@ -360,21 +361,20 @@ function App() {
 
       createdRoundId = data.id;
 
-      if (form.file) {
-        const safeName = form.file.name.replace(/[^\w.\-\u0600-\u06FF]/g, '_');
-        const path = `${session.user.id}/${data.id}/${Date.now()}-${safeName}`;
-
+      const uploadedMenuPaths = [];
+      for (const file of menuFiles) {
+        const safeName = file.name.replace(/[^\w.\-\u0600-\u06FF]/g, '_');
+        const path = `${session.user.id}/${data.id}/${Date.now()}-${crypto.randomUUID()}-${safeName}`;
         const { error: uploadError } = await supabase.storage
           .from('round-menus')
-          .upload(path, form.file, { upsert: true, contentType: form.file.type });
-
+          .upload(path, file, { upsert: false, contentType: file.type });
         if (uploadError) throw uploadError;
-
-        const { error: updateError } = await supabase
-          .from('rounds')
-          .update({ menu_path: path })
+        uploadedMenuPaths.push(path);
+      }
+      if (uploadedMenuPaths.length) {
+        const { error: updateError } = await supabase.from('rounds')
+          .update({ menu_path: uploadedMenuPaths[0], menu_paths: uploadedMenuPaths })
           .eq('id', data.id);
-
         if (updateError) throw updateError;
       }
 
@@ -385,6 +385,9 @@ function App() {
       return true;
     } catch (err) {
       if (createdRoundId) {
+        const { data: existingRound } = await supabase.from('rounds').select('menu_paths,menu_path').eq('id', createdRoundId).maybeSingle();
+        const cleanupPaths = [...new Set([...(existingRound?.menu_paths || []), existingRound?.menu_path].filter(Boolean))];
+        if (cleanupPaths.length) await supabase.storage.from('round-menus').remove(cleanupPaths);
         await supabase.from('rounds').delete().eq('id', createdRoundId);
       }
       report(err);
@@ -1122,7 +1125,8 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
   }, [restaurants, restaurantId]);
   const [title, setTitle] = useState('');
   const [deadline, setDeadline] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const submit = async event => {
     event.preventDefault();
@@ -1132,15 +1136,15 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
       restaurantId,
       title,
       deadline: deadline ? new Date(deadline).toISOString() : null,
-      file
+      files
     });
 
     if (created) {
       setFoodType('');
       setTitle('');
       setDeadline('');
-      setFile(null);
-      document.getElementById('round-menu-file').value = '';
+      setFiles([]);
+      setFileInputKey(key => key + 1);
       document.getElementById('create-round')?.close();
     }
   };
@@ -1171,9 +1175,22 @@ function CreateRoundDialog({ onCreate, onCreateRestaurant, busy, restaurants = [
       <label>موعد إغلاق الطلبات</label>
       <input type="datetime-local" min={new Date().toISOString().slice(0, 16)} value={deadline} onChange={e => setDeadline(e.target.value)} />
 
-      <label>منيو المطعم (اختياري — صورة أو PDF)</label>
-      <input id="round-menu-file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
-      <small className="hint">الحد الأقصى 10 ميجابايت.</small>
+      <label>صور أو ملفات منيو المطعم (اختياري)</label>
+      <input key={fileInputKey} id="round-menu-file" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" onChange={e => {
+        const selected = Array.from(e.target.files || []);
+        setFiles(current => {
+          const seen = new Set(current.map(file => `${file.name}:${file.size}:${file.lastModified}`));
+          return [...current, ...selected.filter(file => !seen.has(`${file.name}:${file.size}:${file.lastModified}`))];
+        });
+        e.target.value = '';
+      }} />
+      <small className="hint">يمكنك اختيار عدة صور أو ملفات PDF، بحد أقصى 12 ملفًا و10 ميجابايت لكل ملف.</small>
+      {files.length > 0 && <div className="selected-files-list">
+        {files.map((file, index) => <div className="selected-file-row" key={`${file.name}-${file.lastModified}-${index}`}>
+          <span>{file.type.startsWith('image/') ? '🖼️' : '📄'} {file.name}</span>
+          <button type="button" className="remove-link" onClick={() => setFiles(current => current.filter((_, i) => i !== index))}>إزالة</button>
+        </div>)}
+      </div>}
 
       <div className="modal-actions">
         <button type="button" className="secondary" onClick={() => document.getElementById('create-round')?.close()}>إلغاء</button>
@@ -1435,9 +1452,8 @@ function GuestPage({ token, onBack }) {
     return () => { live = false; };
   }, [token]);
 
-  const menuUrl = round?.menu_path
-    ? supabase.storage.from('round-menus').getPublicUrl(round.menu_path).data.publicUrl
-    : null;
+  const menuPaths = round?.menu_paths?.length ? round.menu_paths : (round?.menu_path ? [round.menu_path] : []);
+  const menuUrls = menuPaths.map(path => ({ path, url: supabase.storage.from('round-menus').getPublicUrl(path).data.publicUrl }));
 
   const closed = !round || round.status !== 'open' ||
     (round.deadline && new Date(round.deadline).getTime() <= Date.now());
@@ -1536,7 +1552,9 @@ function GuestPage({ token, onBack }) {
         <p className="muted">{round.title || 'سجّل طلبك، وحدد الأصناف الفردية والمشتركة.'}</p>
 
         {round.deadline && <p className="deadline-note">استقبال الطلبات حتى: {dateLabel(round.deadline)}</p>}
-        {menuUrl && <a className="menu-link" href={menuUrl} target="_blank" rel="noreferrer">📎 عرض منيو المطعم</a>}
+        {menuUrls.length > 0 && <div className="menu-links">
+          {menuUrls.map((item, index) => <a className="menu-link" key={item.path} href={item.url} target="_blank" rel="noreferrer">📎 عرض ملف المنيو {index + 1}</a>)}
+        </div>}
 
         <form onSubmit={submit}>
           <label>اسمك</label>
