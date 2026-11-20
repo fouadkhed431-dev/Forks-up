@@ -32,11 +32,11 @@ const resolveTheme = round => {
 };
 
 const THEME_PRESENTATION = {
-  seafood: { label: 'من البحر لسفرتك… طازة وعلى مزاجك! 🌊', icon: '🦐', note: 'استعد لوجبة بحرية تستاهل الانتظار' },
-  bistro: { label: 'برجر مظبوط… ومزاجك هيبقى أظبط! 🍔', icon: '🍔', note: 'عضّة ورا عضّة… والسعادة تكمل' },
-  pizza: { label: 'قطعة بيتزا… وتكتمل اللمة! 🍕', icon: '🍕', note: 'جبنة سايحة ومزاج إيطالي على أصوله' },
-  grill: { label: 'ريحة الشوي لوحدها حكاية! 🔥', icon: '🥩', note: 'وجبة سخنة وطعمها على الفحم' },
-  general: { label: 'اللمة تحلى لما الأكل يجمعنا! 🍽️', icon: '🍽️', note: 'اختار أكلك وخلي الباقي علينا' }
+  seafood: { label: 'Straight from the sea, with a little wow! 🌊', icon: '🦐', note: "Fun fact: A shrimp's heart is actually located in its head." },
+  bistro: { label: 'The Sizzle Is Science. 🍔', icon: '🍔', note: 'That crave-worthy browned crust? It’s the Maillard reaction at work.' },
+  pizza: { label: 'A Little Slice of Food Science. 🍕', icon: '🍕', note: 'Mozzarella’s famous cheese pull comes from its stretchy protein network.' },
+  grill: { label: 'Where Fire Turns Into Flavor. 🔥', icon: '🥩', note: 'High-heat browning creates hundreds of delicious new flavor compounds.' },
+  general: { label: 'Good Food. Great Company. 🍽️', icon: '🍽️', note: 'Your sense of smell does a huge part of the work behind every flavor.' }
 };
 
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
