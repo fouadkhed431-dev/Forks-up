@@ -158,12 +158,14 @@ function App() {
     }
 
     const restaurantId = roundResult.data.restaurant_id;
-    const [menuResult, requestResult, employeeResult] = await Promise.all([
-      restaurantId ? supabase.from('restaurant_menu_items').select('*').eq('restaurant_id', restaurantId).eq('active', true).order('name') : Promise.resolve({ data: [], error: null }),
+    const [menuResult, requestResult, employeeResult, menusResult, categoriesResult] = await Promise.all([
+      restaurantId ? supabase.from('restaurant_menu_items').select('*').eq('menu_id', roundResult.data.menu_id || '00000000-0000-0000-0000-000000000000').eq('active', true).order('sort_order').order('name') : Promise.resolve({ data: [], error: null }),
       restaurantId ? supabase.from('menu_item_requests').select('*').eq('round_id', id).order('created_at', { ascending: true }) : Promise.resolve({ data: [], error: null }),
-      supabase.from('employee_directory').select('id,employee_name').order('employee_name')
+      supabase.from('employee_directory').select('id,employee_name').order('employee_name'),
+      restaurantId ? supabase.from('restaurant_menus').select('*').eq('restaurant_id', restaurantId).order('created_at') : Promise.resolve({ data: [], error: null }),
+      roundResult.data.menu_id ? supabase.from('restaurant_menu_categories').select('*').eq('menu_id', roundResult.data.menu_id).order('sort_order').order('name') : Promise.resolve({ data: [], error: null })
     ]);
-    for (const result of [menuResult, requestResult, employeeResult]) if (result.error) throw result.error;
+    for (const result of [menuResult, requestResult, employeeResult, menusResult, categoriesResult]) if (result.error) throw result.error;
 
     const priceMap = Object.fromEntries(
       (priceResult.data || []).map(row => [row.normalized_name, Number(row.unit_price)])
@@ -176,6 +178,8 @@ function App() {
       priceRows: priceResult.data || [],
       logs: logResult.data || [],
       menuItems: menuResult.data || [],
+      menus: menusResult.data || [],
+      menuCategories: categoriesResult.data || [],
       menuRequests: requestResult.data || [],
       employeeNames: [...new Set([...(employeeResult.data || []).map(row => row.employee_name), ...getParticipants(orderResult.data || [])])].sort((a,b) => a.localeCompare(b,'ar'))
     });
@@ -1600,81 +1604,34 @@ function EditOrder({ order, employeeNames = [], busy, onCancel, onSave }) {
 
 const MENU_CATEGORIES = ['السلطات','الأرز والأطباق الجانبية','السمك','الجمبري','الطواجن','الوجبات','الشوربات','السندوتشات','أصناف أخرى'];
 
-function RestaurantMenuPanel({ round, restaurants = [], onAssign, busy, onAdd, onSaveItem, onDeleteItem, onImportRoundItems, onApprove, onDismiss }) {
-  const [name, setName] = useState('');
-  const [category, setCategory] = useState('السمك');
-  const [subcategory, setSubcategory] = useState('');
-  const [preparation, setPreparation] = useState('');
-  const [error, setError] = useState('');
-  const [editing, setEditing] = useState(null);
-  const run = async action => { try { setError(''); await action(); } catch (err) { setError(err?.message || 'تعذر حفظ التغيير.'); } };
-  const makeName = () => category === 'السمك'
-    ? [subcategory && 'سمك ' + subcategory, preparation].filter(Boolean).join(' — ')
-    : category === 'الجمبري'
-      ? ['جمبري', preparation || name].filter(Boolean).join(' — ')
-      : name.trim();
-  const submit = e => {
-    e.preventDefault();
-    const itemName = makeName();
-    if (!itemName) { setError('أكمل بيانات الصنف.'); return; }
-    if ((category === 'السمك' && (!subcategory.trim() || !preparation.trim())) || (category === 'الجمبري' && !preparation.trim())) {
-      setError('اختر نوع السمك وطريقة التسوية، أو طريقة تحضير الجمبري.'); return;
-    }
-    run(async () => {
-      await onAdd({ name: itemName, category, subcategory: category === 'السمك' ? subcategory.trim() : '', preparation: preparation.trim() });
-      setName(''); setSubcategory(''); setPreparation('');
-    });
-  };
-  const sorted = [...(round.menuItems || [])].sort((a,b) =>
-    MENU_CATEGORIES.indexOf(a.category) - MENU_CATEGORIES.indexOf(b.category) ||
-    (a.sort_order || 0) - (b.sort_order || 0) ||
-    String(a.name).localeCompare(String(b.name),'ar')
-  );
-  return <div className="panel card">
-    <div className="panel-title"><div><h3>منيو المطعم</h3><p className="muted">منيو منظم حسب الأقسام، ويمكنك تعديل الأصناف أو إخفاؤها في أي وقت.</p></div><strong>{round.menuItems?.length || 0} صنف</strong></div>
-    {!round.restaurant_id ? <div className="empty-inline" style={{display:'grid',gap:10}}><span>هذه الجولة غير مرتبطة بمطعم. اختر المطعم المناسب لربطها بقائمته.</span><select defaultValue="" onChange={e=>e.target.value && onAssign(e.target.value)}><option value="">اختر مطعماً محفوظاً</option>{restaurants.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></div> : <>
-      <form onSubmit={submit} style={{display:'grid',gap:10,margin:'14px 0',padding:14,border:'1px solid var(--line,#e6dfd0)',borderRadius:14}}>
-        <h4 style={{margin:0}}>إضافة صنف جديد</h4>
-        <label>القسم<select value={category} onChange={e=>{setCategory(e.target.value);setName('');setSubcategory('');setPreparation('');}}>
-          {MENU_CATEGORIES.map(value=><option key={value}>{value}</option>)}
-        </select></label>
-        {category === 'السمك' ? <>
-          <label>نوع السمك<input required value={subcategory} onChange={e=>setSubcategory(e.target.value)} placeholder="مثلاً: بوري، بلطي، دنيس، قاروص..." /></label>
-          <label>طريقة التسوية<select required value={preparation} onChange={e=>setPreparation(e.target.value)}><option value="">اختر طريقة التسوية</option>{['مشوي','سنجاري','زيت وليمون','مقلي','بطاطس كريمة'].map(v=><option key={v}>{v}</option>)}</select></label>
-        </> : category === 'الجمبري' ? <>
-          <label>طريقة التحضير<select required value={preparation} onChange={e=>setPreparation(e.target.value)}><option value="">اختر طريقة التحضير</option>{['طاجن أحمر','طاجن وايت صوص','طاجن ميكس مع سبيط','مشوي','مقلي'].map(v=><option key={v}>{v}</option>)}</select></label>
-        </> : <label>اسم الصنف<input required value={name} onChange={e=>setName(e.target.value)} placeholder="اكتب اسم الصنف" /></label>}
-        <button className="primary" disabled={busy}>إضافة إلى المنيو</button>
-      </form>
-      {error && <div className="inline-error">{error}</div>}
-      <button type="button" className="secondary small-btn" disabled={busy || !(round.orders || []).some(order => (order.order_items || []).length)} onClick={() => run(onImportRoundItems)}>استخراج أصناف طلبات هذه الجولة وإضافتها للمنيو</button>
-      <small className="hint">يمكنك استخدام هذه الخاصية لإضافة أصناف الطلبات القديمة، ثم تعديل القسم لكل صنف.</small>
-      <div style={{display:'grid',gap:16,marginTop:18}}>
-        {MENU_CATEGORIES.map(section=>{
-          const rows=sorted.filter(item=>(item.category || 'أصناف أخرى')===section);
-          if(!rows.length)return null;
-          return <section key={section} style={{border:'1px solid var(--line,#e6dfd0)',borderRadius:14,padding:12}}>
-            <h4 style={{margin:'0 0 10px',color:'var(--primary,#174b3b)'}}>{section} <small className="muted">({rows.length})</small></h4>
-            <div style={{display:'grid',gap:8}}>
-              {rows.map(item=>editing?.id===item.id ? <div key={item.id} style={{display:'grid',gap:8,padding:10,background:'var(--surface,#faf8f2)',borderRadius:10}}>
-                <input value={editing.name} onChange={e=>setEditing({...editing,name:e.target.value})} aria-label="اسم الصنف" />
-                <select value={editing.category} onChange={e=>setEditing({...editing,category:e.target.value})}>{MENU_CATEGORIES.map(v=><option key={v}>{v}</option>)}</select>
-                <input value={editing.subcategory || ''} onChange={e=>setEditing({...editing,subcategory:e.target.value})} placeholder="النوع الفرعي (اختياري)" />
-                <input value={editing.preparation || ''} onChange={e=>setEditing({...editing,preparation:e.target.value})} placeholder="طريقة التحضير (اختياري)" />
-                <div className="inline-actions"><button type="button" className="primary small-btn" onClick={()=>run(async()=>{await onSaveItem(editing);setEditing(null);})}>حفظ</button><button type="button" className="secondary small-btn" onClick={()=>setEditing(null)}>إلغاء</button></div>
-              </div> : <div key={item.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'10px 12px',border:'1px solid var(--line,#e6dfd0)',borderRadius:10}}>
-                <div><b>{item.name}</b>{item.subcategory && <small className="muted" style={{display:'block'}}>{item.subcategory}{item.preparation ? ' · '+item.preparation : ''}</small>}</div>
-                <div className="order-actions"><button type="button" className="text-btn" onClick={()=>setEditing({...item})}>تعديل</button><button type="button" className="text-btn danger" onClick={()=>window.confirm('إخفاء هذا الصنف من قائمة الموظفين؟') && run(()=>onDeleteItem(item))}>حذف</button></div>
-              </div>)}
-            </div>
-          </section>;
-        })}
-      </div>
-      <div className="form-divider" />
-      <h4>طلبات إضافة أصناف من الموظفين ({round.menuRequests?.length || 0})</h4>
-      {!round.menuRequests?.length ? <div className="empty-inline">لا توجد طلبات جديدة.</div> : round.menuRequests.map(request => <div className="order-card" key={request.id} style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}><div><b>{request.requested_name}</b><small>طلبه: {request.requested_by_name}</small></div><div className="order-actions"><button className="primary small-btn" onClick={()=>run(()=>onApprove(request))}>اعتماد</button><button className="text-btn danger" onClick={()=>run(()=>onDismiss(request))}>رفض</button></div></div>)}
-    </>}
-  </div>;
+function RestaurantMenuPanel({round,restaurants=[],onAssign,busy,onAdd,onSaveItem,onDeleteItem,onImportRoundItems,onApprove,onDismiss,onCreateMenu,onRenameMenu,onDeleteMenu,onAddCategory,onRenameCategory,onDeleteCategory}) {
+ const [newMenu,setNewMenu]=useState(''),[newCat,setNewCat]=useState(''),[name,setName]=useState(''),[category,setCategory]=useState('السمك'),[sub,setSub]=useState(''),[prep,setPrep]=useState(''),[weights,setWeights]=useState([]),[error,setError]=useState('');
+ const cats=round.menuCategories?.length?round.menuCategories:MENU_CATEGORIES.map((name,i)=>({name,sort_order:i}));
+ const run=async fn=>{try{setError('');await fn();}catch(e){setError(e.message||'تعذر تنفيذ العملية');}};
+ const itemName=category==='السمك'?['سمك '+sub,prep].filter(Boolean).join(' — '):category==='الجمبري'?['جمبري',prep].join(' — '):name.trim();
+ return <div className="panel card">
+ <div className="panel-title"><div><h3>إدارة المنيو</h3><p className="muted">تحكم كامل في المنيوهات والأقسام والأصناف والأوزان.</p></div></div>
+ {!round.restaurant_id?<div className="empty-inline"><select defaultValue="" onChange={e=>e.target.value&&onAssign(e.target.value)}><option value="">اختر مطعماً</option>{restaurants.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></div>:<>
+ <section className="sub-panel" style={{display:'grid',gap:8,border:'1px solid var(--line)',borderRadius:12,padding:12}}>
+ <b>منيوهات المطعم</b>
+ <select value={round.menu_id||''} onChange={e=>run(()=>onAssign(round.restaurant_id,e.target.value))}>{(round.menus||[]).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select>
+ <div className="inline-actions"><input value={newMenu} onChange={e=>setNewMenu(e.target.value)} placeholder="اسم المنيو الجديد"/><button type="button" className="primary small-btn" disabled={!newMenu.trim()} onClick={()=>run(async()=>{await onCreateMenu(newMenu.trim());setNewMenu('');})}>إنشاء</button></div>
+ <div className="inline-actions"><button type="button" className="secondary small-btn" onClick={()=>{const v=prompt('اسم المنيو:',round.menus?.find(m=>m.id===round.menu_id)?.name||'');if(v?.trim())run(()=>onRenameMenu(round.menu_id,v.trim()));}}>تعديل الاسم</button><button type="button" className="text-btn danger" disabled={(round.menus||[]).length<2} onClick={()=>confirm('حذف المنيو؟ لن تتأثر الفواتير القديمة.')&&run(()=>onDeleteMenu(round.menu_id))}>حذف المنيو</button></div>
+ </section>
+ <section style={{display:'grid',gap:8,marginTop:14}}><b>الأقسام الرئيسية</b>
+ {cats.map(c=><div className="inline-actions" key={c.id||c.name} style={{justifyContent:'space-between'}}><span>{c.name}</span><span><button className="text-btn" onClick={()=>{const v=prompt('اسم القسم الجديد:',c.name);if(v?.trim())run(()=>onRenameCategory(c.id,c.name,v.trim()));}}>تعديل</button> <button className="text-btn danger" onClick={()=>confirm('حذف القسم ونقل أصنافه إلى أصناف أخرى؟')&&run(()=>onDeleteCategory(c.id,c.name))}>حذف</button></span></div>)}
+ <div className="inline-actions"><input value={newCat} onChange={e=>setNewCat(e.target.value)} placeholder="إضافة قسم رئيسي"/><button className="secondary small-btn" onClick={()=>run(async()=>{await onAddCategory(newCat.trim());setNewCat('');})} disabled={!newCat.trim()}>إضافة قسم</button></div></section>
+ <form onSubmit={e=>{e.preventDefault();if(!itemName.trim())return;run(async()=>{await onAdd({name:itemName,category,subcategory:sub,preparation:prep,weight_options:weights});setName('');setSub('');setPrep('');setWeights([]);});}} style={{display:'grid',gap:9,marginTop:16,padding:12,border:'1px solid var(--line)',borderRadius:12}}>
+ <b>إضافة صنف رئيسي أو فرعي</b><label>القسم<select value={category} onChange={e=>setCategory(e.target.value)}>{cats.map(c=><option key={c.id||c.name}>{c.name}</option>)}</select></label>
+ {category==='السمك'?<><label>نوع السمك<input required value={sub} onChange={e=>setSub(e.target.value)} placeholder="بوري، بلطي، دنيس..."/></label><label>طريقة التسوية<select required value={prep} onChange={e=>setPrep(e.target.value)}><option value="">اختر</option>{['مشوي','سنجاري','زيت وليمون','مقلي','بطاطس كريمة'].map(x=><option key={x}>{x}</option>)}</select></label></>:category==='الجمبري'?<label>طريقة التحضير<select required value={prep} onChange={e=>setPrep(e.target.value)}><option value="">اختر</option>{['طاجن أحمر','طاجن وايت صوص','طاجن ميكس مع سبيط','مشوي','مقلي'].map(x=><option key={x}>{x}</option>)}</select></label>:<label>اسم الصنف<input required value={name} onChange={e=>setName(e.target.value)}/></label>}
+ {(category==='السمك'||category==='الجمبري')&&<div><b>الأوزان المتاحة</b>{(category==='السمك'?['سمكة واحدة','نصف كيلو','كيلو']:['ربع كيلو','نصف كيلو','كيلو']).map(w=><label key={w} style={{display:'block'}}><input type="checkbox" checked={weights.includes(w)} onChange={e=>setWeights(old=>e.target.checked?[...old,w]:old.filter(x=>x!==w))}/> {w}</label>)}</div>}
+ <button className="primary" disabled={busy}>إضافة الصنف</button></form>
+ {error&&<div className="inline-error">{error}</div>}
+ <div style={{display:'grid',gap:12,marginTop:16}}>{cats.map(c=>{const rows=(round.menuItems||[]).filter(x=>(x.category||'أصناف أخرى')===c.name);return rows.length?<section key={c.id||c.name} style={{border:'1px solid var(--line)',borderRadius:12,padding:10}}><h4>{c.name}</h4>{rows.map(x=><div key={x.id} className="inline-actions" style={{justifyContent:'space-between',padding:'7px 0'}}><span><b>{x.name}</b><small style={{display:'block'}}>{(x.weight_options||[]).join(' · ')}</small></span><span><button className="text-btn" onClick={()=>{const v=prompt('تعديل اسم الصنف:',x.name);if(v?.trim())run(()=>onSaveItem({...x,name:v.trim()}));}}>تعديل</button> <button className="text-btn danger" onClick={()=>confirm('إزالة الصنف من المنيو؟')&&run(()=>onDeleteItem(x))}>إزالة</button></span></div>)}</section>:null;})}</div>
+ <button type="button" className="secondary small-btn" onClick={()=>run(onImportRoundItems)}>استخراج أصناف الجولة الحالية</button>
+ <h4>طلبات الموظفين لإضافة أصناف</h4>{(round.menuRequests||[]).map(r=><div className="inline-actions" key={r.id}><span>{r.requested_name} — {r.requested_by_name}</span><button className="primary small-btn" onClick={()=>run(()=>onApprove(r))}>اعتماد</button><button className="text-btn danger" onClick={()=>run(()=>onDismiss(r))}>رفض</button></div>)}
+ </>}
+ </div>;
 }
 
 function RestaurantOrderSummary({ round }) {
