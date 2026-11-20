@@ -1489,7 +1489,6 @@ function GuestPage({ token, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [name, setName] = useState('');
-  const [employeeChoice, setEmployeeChoice] = useState('');
   const [items, setItems] = useState([{ key: crypto.randomUUID(), description: '', quantity: 1, kind: 'individual', participantsText: '', customRequest: false }]);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1516,6 +1515,9 @@ function GuestPage({ token, onBack }) {
   const resolvedTheme = resolveTheme(round);
   const themeClass = `theme-${resolvedTheme}`;
   const themePresentation = THEME_PRESENTATION[resolvedTheme] || THEME_PRESENTATION.general;
+  const employeeSuggestions = name.trim().length >= 2
+    ? (round?.employee_names || []).filter(person => person.toLocaleLowerCase('ar').startsWith(name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('ar'))).slice(0, 6)
+    : [];
   const menuUrls = menuPaths.map(path => ({ path, url: supabase.storage.from('round-menus').getPublicUrl(path).data.publicUrl }));
 
   const closed = !round || round.status !== 'open' ||
@@ -1592,7 +1594,7 @@ function GuestPage({ token, onBack }) {
   if (sent) {
     return <div className={`guest-wrap ${themeClass}`}>
       <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
-      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>&quot;{themePresentation.label}&quot;</b><small>{themePresentation.note}</small></div></div>
       <div className="guest-card card success-card">
         <div className="success-icon">✓</div>
         <h1>طلبك وصل!</h1>
@@ -1604,7 +1606,7 @@ function GuestPage({ token, onBack }) {
 
   return <div className={`guest-wrap ${themeClass}`}>
     <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
-      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>&quot;{themePresentation.label}&quot;</b><small>{themePresentation.note}</small></div></div>
 
     <div className="guest-card card">
       {!round || closed ? <>
@@ -1622,13 +1624,12 @@ function GuestPage({ token, onBack }) {
         </div>}
 
         <form onSubmit={submit}>
-          <label>اسمك</label>
-          <select required value={employeeChoice} onChange={e => { setEmployeeChoice(e.target.value); setName(e.target.value === '__new__' ? '' : e.target.value); }}>
-            <option value="">اختر اسمك من القائمة</option>
-            {(round.employee_names || []).map(person => <option key={person} value={person}>{person}</option>)}
-            <option value="__new__">اسمي غير موجود — إدخال اسم جديد</option>
-          </select>
-          {employeeChoice === '__new__' && <input required minLength="2" maxLength="100" value={name} onChange={e => setName(e.target.value)} placeholder="اكتب اسمك بالكامل" />}
+          <label htmlFor="guest-employee-name">اسمك</label>
+          <input id="guest-employee-name" required minLength="2" maxLength="100" autoComplete="off" value={name} onChange={e => setName(e.target.value)} placeholder="اكتب اسمك الأول أو أول اسمين" />
+          {employeeSuggestions.length > 0 && <div className="employee-suggestions" role="listbox" aria-label="الأسماء المطابقة">
+            {employeeSuggestions.map(person => <button type="button" role="option" key={person} onClick={() => setName(person)}>{person}</button>)}
+          </div>}
+          {name.trim().length >= 2 && employeeSuggestions.length === 0 && <small className="employee-name-hint">لا توجد أسماء مطابقة — أكمل كتابة اسمك بالكامل.</small>}
 
           <div className="form-divider" />
           <div className="items-title"><b>الأصناف المطلوبة</b><small>أضف كل صنف في سطر مستقل</small></div>
