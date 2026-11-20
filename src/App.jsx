@@ -296,9 +296,18 @@ function App() {
     try {
       let selectedMenuId = form.menuId || null;
       if (!selectedMenuId && form.restaurantId) {
-        const { data: defaultMenu, error: menuLookupError } = await supabase.from('restaurant_menus').select('id').eq('restaurant_id', form.restaurantId).order('created_at').limit(1).maybeSingle();
-        if (menuLookupError) throw menuLookupError;
-        selectedMenuId = defaultMenu?.id || null;
+        const restaurant = restaurants.find(row => row.id === form.restaurantId);
+        let menuQuery = supabase.from('restaurant_menus').select('id,name').eq('restaurant_id', form.restaurantId);
+        if (restaurant?.name?.trim().toLowerCase() === 'bistro') {
+          const { data: bistroMenu, error: bistroMenuError } = await menuQuery.eq('name', 'Bistro').maybeSingle();
+          if (bistroMenuError) throw bistroMenuError;
+          selectedMenuId = bistroMenu?.id || null;
+        }
+        if (!selectedMenuId) {
+          const { data: defaultMenu, error: menuLookupError } = await supabase.from('restaurant_menus').select('id').eq('restaurant_id', form.restaurantId).order('created_at').limit(1).maybeSingle();
+          if (menuLookupError) throw menuLookupError;
+          selectedMenuId = defaultMenu?.id || null;
+        }
       }
       if (form.file && form.file.size > 10 * 1024 * 1024) {
         throw new Error('حجم المنيو يجب ألا يتجاوز 10 ميجابايت.');
@@ -638,7 +647,14 @@ function App() {
 
         {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={async (restaurantId,menuId) => {
             let targetMenu=menuId||null;
-            if(restaurantId&&!targetMenu){const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).order('created_at').limit(1).maybeSingle();if(e)throw e;targetMenu=data?.id||null;}
+            if(restaurantId&&!targetMenu){
+              const restaurant=restaurants.find(r=>r.id===restaurantId);
+              if(restaurant?.name?.trim().toLowerCase()==='bistro'){
+                const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).eq('name','Bistro').maybeSingle();
+                if(e)throw e;targetMenu=data?.id||null;
+              }
+              if(!targetMenu){const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).order('created_at').limit(1).maybeSingle();if(e)throw e;targetMenu=data?.id||null;}
+            }
             const {data,error:e}=await supabase.from('rounds').update({restaurant_id:restaurantId,menu_id:targetMenu}).eq('id',roundData.id).select('id').maybeSingle();
             if(e)throw e;if(!data)throw new Error('لم يتم ربط المطعم بالجولة. تحقق من صلاحيات المسؤول.');
             await loadRound(roundData.id);await loadRestaurants();flash('تم ربط المطعم والمنيو بالجولة');
