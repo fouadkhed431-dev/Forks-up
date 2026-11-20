@@ -32,11 +32,11 @@ const resolveTheme = round => {
 };
 
 const THEME_PRESENTATION = {
-  seafood: { label: 'هوية بحرية', icon: '🐟', note: 'ألوان مستوحاة من البحر والمأكولات البحرية' },
-  bistro: { label: 'هوية Bistro', icon: '🍔', note: 'طابع دافئ يناسب البرجر والسندوتشات' },
-  pizza: { label: 'هوية البيتزا', icon: '🍕', note: 'ألوان دافئة مستوحاة من المطبخ الإيطالي' },
-  grill: { label: 'هوية المشويات', icon: '🔥', note: 'طابع ترابي دافئ للمشويات' },
-  general: { label: 'هوية Forks Up', icon: '🍽️', note: 'التصميم الكلاسيكي للتطبيق' }
+  seafood: { label: 'من البحر لسفرتك… طازة وعلى مزاجك! 🌊', icon: '🦐', note: 'استعد لوجبة بحرية تستاهل الانتظار' },
+  bistro: { label: 'برجر مظبوط… ومزاجك هيبقى أظبط! 🍔', icon: '🍔', note: 'عضّة ورا عضّة… والسعادة تكمل' },
+  pizza: { label: 'قطعة بيتزا… وتكتمل اللمة! 🍕', icon: '🍕', note: 'جبنة سايحة ومزاج إيطالي على أصوله' },
+  grill: { label: 'ريحة الشوي لوحدها حكاية! 🔥', icon: '🥩', note: 'وجبة سخنة وطعمها على الفحم' },
+  general: { label: 'اللمة تحلى لما الأكل يجمعنا! 🍽️', icon: '🍽️', note: 'اختار أكلك وخلي الباقي علينا' }
 };
 
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
@@ -1575,7 +1575,7 @@ function GuestPage({ token, onBack }) {
   if (sent) {
     return <div className={`guest-wrap ${themeClass}`}>
       <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
-      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div><span className="guest-theme-tag">هوية الجولة</span></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div></div>
       <div className="guest-card card success-card">
         <div className="success-icon">✓</div>
         <h1>طلبك وصل!</h1>
@@ -1587,7 +1587,7 @@ function GuestPage({ token, onBack }) {
 
   return <div className={`guest-wrap ${themeClass}`}>
     <div className="guest-brand"><Logo /><span>HALL NO. 213</span></div>
-      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div><span className="guest-theme-tag">هوية الجولة</span></div>
+      <div className={`guest-theme-banner ${themeClass}`}><span className="guest-theme-icon" aria-hidden="true">{themePresentation.icon}</span><div><b>{themePresentation.label}</b><small>{themePresentation.note}</small></div></div>
 
     <div className="guest-card card">
       {!round || closed ? <>
