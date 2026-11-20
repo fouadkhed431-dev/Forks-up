@@ -649,7 +649,7 @@ function App() {
           onRenameCategory={async (id,oldName,name)=>{const {error:e}=await supabase.from('restaurant_menu_categories').update({name}).eq('id',id);if(e)throw e;await supabase.from('restaurant_menu_items').update({category:name}).eq('menu_id',roundData.menu_id).eq('category',oldName);await loadRound(roundData.id);}}
           onDeleteCategory={async (id,oldName)=>{await supabase.from('restaurant_menu_items').update({category:'أصناف أخرى'}).eq('menu_id',roundData.menu_id).eq('category',oldName);if(id){const {error:e}=await supabase.from('restaurant_menu_categories').delete().eq('id',id);if(e)throw e;}await loadRound(roundData.id);}}
           onAdd={async item=>{const name=item.name.trim();if(!name)throw new Error('اكتب اسم الصنف.');const row={restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name,normalized_name:normalizeItemName(name),category:item.category,subcategory:item.subcategory||'',preparation:item.preparation||'',weight_options:item.weight_options||[],active:true,sort_order:0};const {error:e}=await supabase.from('restaurant_menu_items').upsert(row,{onConflict:'menu_id,normalized_name'});if(e)throw e;await loadRound(roundData.id);flash('تمت إضافة الصنف');}}
-          onSaveItem={async item=>{const {error:e}=await supabase.from('restaurant_menu_items').update({name:item.name,normalized_name:normalizeItemName(item.name),category:item.category,weight_options:item.weight_options||[],updated_at:new Date().toISOString()}).eq('id',item.id);if(e)throw e;await loadRound(roundData.id);}}
+          onSaveItem={async item=>{const {error:e}=await supabase.from('restaurant_menu_items').update({name:item.name,normalized_name:normalizeItemName(item.name),category:item.category,weight_options:item.weight_options||[],default_price:item.default_price??null,single_price:item.single_price??null,double_price:item.double_price??null,updated_at:new Date().toISOString()}).eq('id',item.id);if(e)throw e;await loadRound(roundData.id);}}
           onDeleteItem={async item=>{const {error:e}=await supabase.from('restaurant_menu_items').update({active:false,updated_at:new Date().toISOString()}).eq('id',item.id);if(e)throw e;await loadRound(roundData.id);}}
           onImportRoundItems={async()=>{const names=[...new Set((roundData.orders||[]).flatMap(o=>o.order_items||[]).map(i=>i.description?.trim()).filter(Boolean))];if(!names.length)throw new Error('لا توجد أصناف لاستخراجها.');const rows=names.map(name=>({restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name,normalized_name:normalizeItemName(name),category:'أصناف أخرى',active:true}));const {error:e}=await supabase.from('restaurant_menu_items').upsert(rows,{onConflict:'menu_id,normalized_name',ignoreDuplicates:true});if(e)throw e;await loadRound(roundData.id);}}
           onApprove={async request=>{const {error:e}=await supabase.from('restaurant_menu_items').upsert({restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name:request.requested_name,normalized_name:request.normalized_name,category:'أصناف أخرى',active:true},{onConflict:'menu_id,normalized_name'});if(e)throw e;const {error:de}=await supabase.from('menu_item_requests').delete().eq('id',request.id);if(de)throw de;await loadRound(roundData.id);}}
@@ -1214,6 +1214,9 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
   const choose = value => value === '__custom__'
     ? onChange({ description: '', customRequest: true, variant: '' })
     : onChange({ description: value, customRequest: false, variant: '' });
+  const priceLabel = row => row.weight_options?.includes('Single') && row.weight_options?.includes('Double')
+    ? `سنجل ${row.single_price ?? '—'} / دبل ${row.double_price ?? '—'} ج`
+    : row.default_price != null ? `${row.default_price} ج` : '';
   return <div style={{display:'grid',gap:8}}>
     <select required value={category} onChange={e=>{setCategory(e.target.value);setSpecies('');onChange({description:'',customRequest:false});}}>
       <option value="">اختر القسم</option>
@@ -1235,15 +1238,16 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
       <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
     </select> : <select required value={selected && selected.category === category ? selected.name : ''} onChange={e=>choose(e.target.value)}>
       <option value="">اختر الصنف</option>
-      {inCategory.map(row=><option key={row.id} value={row.name}>{row.name}</option>)}
+      {inCategory.map(row=><option key={row.id} value={row.name}>{row.name}{priceLabel(row)?' — '+priceLabel(row):''}</option>)}
       <option value="__custom__">الصنف غير موجود — طلب إضافته</option>
     </select>}
-    {selected?.weight_options?.length > 0 && <label>الوزن / الحجم
+    {selected?.weight_options?.length > 0 && <label>{selected.weight_options.includes('Single') ? 'اختيار البرجر' : 'الوزن / الحجم'}
       <select required value={item.variant || ''} onChange={e=>onChange({variant:e.target.value})}>
-        <option value="">اختر الوزن</option>
-        {selected.weight_options.map(weight=><option key={weight}>{weight}</option>)}
+        <option value="">اختر {selected.weight_options.includes('Single') ? 'الحجم' : 'الوزن'}</option>
+        {selected.weight_options.map(weight=><option key={weight} value={weight}>{weight}{weight==='Single'&&selected.single_price!=null?` — ${selected.single_price} ج`:weight==='Double'&&selected.double_price!=null?` — ${selected.double_price} ج`:''}</option>)}
       </select>
     </label>}
+    {selected && priceLabel(selected) && !selected.weight_options?.includes('Single') && <small className="muted">سعر القائمة: {priceLabel(selected)}</small>}
   </div>;
 }
 
@@ -1613,7 +1617,7 @@ function RestaurantMenuPanel({round,restaurants=[],onAssign,busy,onAdd,onSaveIte
  {(category==='السمك'||category==='الجمبري')&&<div><b>الأوزان المتاحة</b>{(category==='السمك'?['سمكة واحدة','نصف كيلو','كيلو']:['ربع كيلو','نصف كيلو','كيلو']).map(w=><label key={w} style={{display:'block'}}><input type="checkbox" checked={weights.includes(w)} onChange={e=>setWeights(old=>e.target.checked?[...old,w]:old.filter(x=>x!==w))}/> {w}</label>)}</div>}
  <button className="primary" disabled={busy}>إضافة الصنف</button></form>
  {error&&<div className="inline-error">{error}</div>}
- <div style={{display:'grid',gap:12,marginTop:16}}>{cats.map(c=>{const rows=(round.menuItems||[]).filter(x=>(x.category||'أصناف أخرى')===c.name);return rows.length?<section key={c.id||c.name} style={{border:'1px solid var(--line)',borderRadius:12,padding:10}}><h4>{c.name}</h4>{rows.map(x=><div key={x.id} className="inline-actions" style={{justifyContent:'space-between',padding:'7px 0'}}><span><b>{x.name}</b><small style={{display:'block'}}>{(x.weight_options||[]).join(' · ')}</small></span><span><button className="text-btn" onClick={()=>{const v=prompt('تعديل اسم الصنف:',x.name);if(v?.trim())run(()=>onSaveItem({...x,name:v.trim()}));}}>الاسم</button> <button className="text-btn" onClick={()=>{const v=prompt('الأوزان المتاحة مفصولة بفاصلة:',(x.weight_options||[]).join('، '));if(v!==null)run(()=>onSaveItem({...x,weight_options:v.split(/[،,]/).map(t=>t.trim()).filter(Boolean)}));}}>الأوزان</button> <button className="text-btn danger" onClick={()=>confirm('إزالة الصنف من المنيو؟')&&run(()=>onDeleteItem(x))}>إزالة</button></span></div>)}</section>:null;})}</div>
+ <div style={{display:'grid',gap:12,marginTop:16}}>{cats.map(c=>{const rows=(round.menuItems||[]).filter(x=>(x.category||'أصناف أخرى')===c.name);return rows.length?<section key={c.id||c.name} style={{border:'1px solid var(--line)',borderRadius:12,padding:10}}><h4>{c.name}</h4>{rows.map(x=><div key={x.id} className="inline-actions" style={{justifyContent:'space-between',padding:'7px 0'}}><span><b>{x.name}</b><small style={{display:'block'}}>{(x.weight_options||[]).join(' · ')}</small></span><span><button className="text-btn" onClick={()=>{const v=prompt('تعديل اسم الصنف:',x.name);if(v?.trim())run(()=>onSaveItem({...x,name:v.trim()}));}}>الاسم</button> <button className="text-btn" onClick={()=>{const v=prompt('الأسعار: السعر العادي أو Single,Double:',x.weight_options?.includes('Single')?`${x.single_price??''},${x.double_price??''}`:(x.default_price??''));if(v!==null){const parts=v.split(/[،,]/).map(t=>t.trim());run(()=>onSaveItem(x.weight_options?.includes('Single')?{...x,single_price:parts[0]===''?null:Number(parts[0]),double_price:parts[1]===''?null:Number(parts[1])}:{...x,default_price:parts[0]===''?null:Number(parts[0])}));}}}>الأسعار</button> <button className="text-btn" onClick={()=>{const v=prompt('الأوزان/الاختيارات مفصولة بفاصلة:',(x.weight_options||[]).join('، '));if(v!==null)run(()=>onSaveItem({...x,weight_options:v.split(/[،,]/).map(t=>t.trim()).filter(Boolean)}));}}>الأوزان/الاختيارات</button> <button className="text-btn danger" onClick={()=>confirm('إزالة الصنف من المنيو؟')&&run(()=>onDeleteItem(x))}>إزالة</button></span></div>)}</section>:null;})}</div>
  <button type="button" className="secondary small-btn" onClick={()=>run(onImportRoundItems)}>استخراج أصناف الجولة الحالية</button>
  <h4>طلبات الموظفين لإضافة أصناف</h4>{(round.menuRequests||[]).map(r=><div className="inline-actions" key={r.id}><span>{r.requested_name} — {r.requested_by_name}</span><button className="primary small-btn" onClick={()=>run(()=>onApprove(r))}>اعتماد</button><button className="text-btn danger" onClick={()=>run(()=>onDismiss(r))}>رفض</button></div>)}
  </>}
