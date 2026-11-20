@@ -158,14 +158,28 @@ function App() {
     }
 
     const restaurantId = roundResult.data.restaurant_id;
-    const [menuResult, requestResult, employeeResult, menusResult, categoriesResult] = await Promise.all([
-      restaurantId ? supabase.from('restaurant_menu_items').select('*').eq('menu_id', roundResult.data.menu_id || '00000000-0000-0000-0000-000000000000').eq('active', true).order('sort_order').order('name') : Promise.resolve({ data: [], error: null }),
+    const menusResult = restaurantId
+      ? await supabase.from('restaurant_menus').select('*').eq('restaurant_id', restaurantId).order('created_at')
+      : { data: [], error: null };
+    if (menusResult.error) throw menusResult.error;
+    const availableMenus = menusResult.data || [];
+    const currentMenu = availableMenus.find(menu => menu.id === roundResult.data.menu_id);
+    const bistroMenu = availableMenus.find(menu => menu.name?.trim().toLowerCase() === 'bistro');
+    const preferredMenu = bistroMenu || availableMenus[0] || null;
+    const effectiveMenuId = bistroMenu
+      ? bistroMenu.id
+      : (currentMenu?.id || preferredMenu?.id || null);
+    if (effectiveMenuId && effectiveMenuId !== roundResult.data.menu_id) {
+      const { error: linkError } = await supabase.from('rounds').update({ menu_id: effectiveMenuId }).eq('id', id);
+      if (linkError) throw linkError;
+    }
+    const [menuResult, requestResult, employeeResult, categoriesResult] = await Promise.all([
+      effectiveMenuId ? supabase.from('restaurant_menu_items').select('*').eq('menu_id', effectiveMenuId).eq('active', true).order('sort_order').order('name') : Promise.resolve({ data: [], error: null }),
       restaurantId ? supabase.from('menu_item_requests').select('*').eq('round_id', id).order('created_at', { ascending: true }) : Promise.resolve({ data: [], error: null }),
       supabase.from('employee_directory').select('id,employee_name').order('employee_name'),
-      restaurantId ? supabase.from('restaurant_menus').select('*').eq('restaurant_id', restaurantId).order('created_at') : Promise.resolve({ data: [], error: null }),
-      roundResult.data.menu_id ? supabase.from('restaurant_menu_categories').select('*').eq('menu_id', roundResult.data.menu_id).order('sort_order').order('name') : Promise.resolve({ data: [], error: null })
+      effectiveMenuId ? supabase.from('restaurant_menu_categories').select('*').eq('menu_id', effectiveMenuId).order('sort_order').order('name') : Promise.resolve({ data: [], error: null })
     ]);
-    for (const result of [menuResult, requestResult, employeeResult, menusResult, categoriesResult]) if (result.error) throw result.error;
+    for (const result of [menuResult, requestResult, employeeResult, categoriesResult]) if (result.error) throw result.error;
 
     const priceMap = Object.fromEntries(
       (priceResult.data || []).map(row => [row.normalized_name, Number(row.unit_price)])
@@ -173,6 +187,7 @@ function App() {
 
     setRoundData({
       ...roundResult.data,
+      menu_id: effectiveMenuId,
       orders: orderResult.data || [],
       prices: priceMap,
       priceRows: priceResult.data || [],
