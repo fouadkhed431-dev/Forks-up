@@ -33,7 +33,7 @@ const resolveTheme = round => {
 
 const THEME_PRESENTATION = {
   seafood: { label: 'Straight from the sea, with a little wow! 🌊', icon: '🦐', note: "Fun fact: A shrimp's heart is actually located in its head." },
-  bistro: { label: 'Big Bites. Bold Flavors. Burger Bliss. 🍔', icon: '🍔', note: 'Fun fact: That delicious golden-brown burger crust is created by the Maillard reaction — the same flavor magic behind toasted bread.' },
+  bistro: { label: 'Big Bites. Bold Flavors. Burger Bliss. 🍔', icon: '🍔', note: 'Fun fact: American cheese melts so smoothly because special emulsifying salts keep its fats and proteins blended together.' },
   pizza: { label: 'A Little Slice of Food Science. 🍕', icon: '🍕', note: 'Mozzarella’s famous cheese pull comes from its stretchy protein network.' },
   grill: { label: 'Where Fire Turns Into Flavor. 🔥', icon: '🥩', note: 'High-heat browning creates hundreds of delicious new flavor compounds.' },
   general: { label: 'Good Food. Great Company. 🍽️', icon: '🍽️', note: 'Your sense of smell does a huge part of the work behind every flavor.' }
@@ -748,6 +748,23 @@ function App() {
           <select aria-label="ثيم الجولة" value={roundData.theme_key || 'auto'} disabled={busy} onChange={e=>updateRound({theme_key:e.target.value})} style={{minWidth:220,border:'1px solid #dedacf',borderRadius:8,padding:'9px 12px',background:'#fffefa'}}>
             {THEME_OPTIONS.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
+        </div>
+        <div className="card" style={{padding:'14px 16px',marginBottom:16}}>
+          <div style={{marginBottom:10}}><b>الأصناف التي تظهر للموظفين</b><small className="muted" style={{display:'block'}}>اختر الأقسام المسموح بطلبها في هذه الجولة فقط. إلغاء جميع الاختيارات يعيد إظهار كل الأقسام.</small></div>
+          {(roundData.menuCategories||[]).length ? <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+            {(roundData.menuCategories||[]).map(category=>{
+              const allNames=(roundData.menuCategories||[]).map(row=>row.name);
+              const visible=roundData.visible_menu_categories==null || roundData.visible_menu_categories.includes(category.name);
+              return <label key={category.id||category.name} style={{display:'inline-flex',alignItems:'center',gap:6,margin:0,padding:'7px 10px',border:'1px solid #e5dfd3',borderRadius:9,background:visible?'#edf4ef':'#fffefa',fontSize:12}}>
+                <input type="checkbox" checked={visible} disabled={busy} onChange={e=>{
+                  const current=roundData.visible_menu_categories==null?allNames:roundData.visible_menu_categories;
+                  const next=e.target.checked?[...new Set([...current,category.name])]:current.filter(name=>name!==category.name);
+                  updateRound({visible_menu_categories:next.length===allNames.length?null:next});
+                }}/>
+                {category.name}
+              </label>;
+            })}
+          </div> : <small className="muted">أضف أقسامًا إلى منيو المطعم أولًا حتى تتمكن من تحديد ما يظهر للموظفين.</small>}
         </div>
 
         <div className="summary-grid">
