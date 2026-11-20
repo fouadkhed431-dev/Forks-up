@@ -139,10 +139,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .guest-theme-icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;font-size:21px}
 .guest-theme-banner b{line-height:1.45}
 
-/* Food icons frame the headline like decorative quotation marks, slightly raised. */
+/* Keep matching food icons inline at both ends of the slogan, like quotation marks. */
 .guest-theme-banner{flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center}
 .guest-theme-banner .guest-theme-copy{width:100%;display:flex;flex-direction:column;align-items:center;gap:3px}
-.guest-theme-banner .guest-theme-line{width:100%;display:flex;align-items:flex-start;justify-content:center;gap:8px}
-.guest-theme-banner .guest-theme-line b{display:block;line-height:1.5;text-align:center}
-.guest-theme-banner .guest-theme-icon{width:auto;height:auto;min-width:0;flex:0 0 auto;padding:0;margin-top:-4px;border:0;border-radius:0;background:transparent;font-size:17px;line-height:1.2}
+.guest-theme-banner .guest-theme-line{width:100%;display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;justify-content:center;gap:5px}
+.guest-theme-banner .guest-theme-line b{display:block;flex:0 1 auto;min-width:0;line-height:1.45;text-align:center}
+.guest-theme-banner .guest-theme-icon{display:inline-flex;width:22px;height:22px;min-width:22px;max-width:22px;flex:0 0 22px;align-items:center;justify-content:center;padding:0;margin:0;transform:translateY(-3px);border:0;border-radius:0;background:transparent;font-size:16px;line-height:1}
 .guest-theme-banner .guest-theme-copy small{display:block;margin-top:2px;text-align:center}
