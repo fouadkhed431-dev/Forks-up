@@ -77,12 +77,35 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 /* Food photography is shown in the identity banner as well as the page backdrop.
    Paint-only styling: preserve all existing layout and form dimensions. */
 .guest-wrap.theme-seafood{background-image:linear-gradient(rgba(234,244,245,.16),rgba(234,244,245,.22)),url('https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1600&q=85');background-position:center top;background-size:cover;background-repeat:no-repeat}
-.guest-wrap.theme-seafood .guest-theme-banner{background-image:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,.38)),url('https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1600&q=85');background-position:center 45%;background-size:cover;background-repeat:no-repeat}
 .guest-wrap.theme-bistro{background-image:linear-gradient(rgba(244,238,229,.16),rgba(244,238,229,.22)),url('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=85');background-position:center top;background-size:cover;background-repeat:no-repeat}
-.guest-wrap.theme-bistro .guest-theme-banner{background-image:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,.38)),url('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=85');background-position:center 45%;background-size:cover;background-repeat:no-repeat}
 .guest-wrap.theme-pizza{background-image:linear-gradient(rgba(248,240,232,.16),rgba(248,240,232,.22)),url('https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=85');background-position:center top;background-size:cover;background-repeat:no-repeat}
-.guest-wrap.theme-pizza .guest-theme-banner{background-image:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,.38)),url('https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=85');background-position:center 45%;background-size:cover;background-repeat:no-repeat}
 .guest-wrap.theme-grill{background-image:linear-gradient(rgba(242,233,223,.16),rgba(242,233,223,.22)),url('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85');background-position:center top;background-size:cover;background-repeat:no-repeat}
-.guest-wrap.theme-grill .guest-theme-banner{background-image:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,.38)),url('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85');background-position:center 45%;background-size:cover;background-repeat:no-repeat}
 .guest-wrap.theme-general{background-image:linear-gradient(rgba(243,235,221,.16),rgba(243,235,221,.22)),url('https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1600&q=85');background-position:center top;background-size:cover;background-repeat:no-repeat}
-.guest-wrap.theme-general .guest-theme-banner{background-image:linear-gradient(rgba(255,255,255,.28),rgba(255,255,255,.38)),url('https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1600&q=85');background-position:center 45%;background-size:cover;background-repeat:no-repeat}
+
+
+/* Keep the app identity crisp; let the food photo show softly through the order panel. */
+.guest-wrap .guest-brand{
+  background:var(--theme-card);
+  border:1px solid var(--theme-line);
+  border-radius:14px;
+  padding:10px 14px;
+  box-shadow:0 5px 18px rgba(30,40,35,.10);
+}
+.guest-wrap .guest-brand .brand,
+.guest-wrap .guest-brand .brand b,
+.guest-wrap .guest-brand .brand small,
+.guest-wrap .guest-brand>span{color:var(--theme-ink)}
+.guest-wrap .guest-theme-banner{
+  background:var(--theme-card)!important;
+  background-image:none!important;
+  color:var(--theme-ink);
+  box-shadow:0 5px 18px rgba(30,40,35,.10);
+}
+.guest-wrap .guest-theme-banner b,
+.guest-wrap .guest-theme-banner small,
+.guest-wrap .guest-theme-tag{color:var(--theme-ink)}
+.guest-wrap .guest-card{
+  background:rgba(255,254,250,.84)!important;
+  -webkit-backdrop-filter:blur(5px);
+  backdrop-filter:blur(5px);
+}
