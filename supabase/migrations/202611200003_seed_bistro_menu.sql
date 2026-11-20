@@ -103,10 +103,12 @@ with seed(category,name,price,single_price,double_price,weight_options,sort_orde
 insert into public.restaurant_menu_items(
  restaurant_id,menu_id,name,normalized_name,category,default_price,single_price,double_price,weight_options,active,sort_order
 )
-select r.id,m.id,s.name,lower(trim(s.name)),s.category,s.price,s.single_price,s.double_price,s.weight_options,true,s.sort_order
+select distinct on (m.id, lower(trim(s.name)))
+ r.id,m.id,s.name,lower(trim(s.name)),s.category,s.price,s.single_price,s.double_price,s.weight_options,true,s.sort_order
 from seed s
 join public.restaurants r on lower(trim(r.name))='bistro'
 join public.restaurant_menus m on m.restaurant_id=r.id and m.name='Bistro'
+order by m.id, lower(trim(s.name)), s.sort_order
 on conflict(menu_id,normalized_name) do update set
  category=excluded.category,
  default_price=excluded.default_price,
