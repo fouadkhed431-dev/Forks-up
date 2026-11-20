@@ -8,6 +8,19 @@ alter table public.employee_directory
 create index if not exists employee_directory_owner_category_order_idx
   on public.employee_directory(created_by, category, sort_order, employee_name);
 
+-- Give existing saved names a deterministic initial order.
+with ranked as (
+  select id, row_number() over (
+    partition by created_by, category
+    order by employee_name, created_at, id
+  ) - 1 as next_order
+  from public.employee_directory
+)
+update public.employee_directory ed
+set sort_order = ranked.next_order
+from ranked
+where ranked.id = ed.id;
+
 create or replace function public.admin_update_employee(
   p_employee_id uuid,
   p_employee_name text,
