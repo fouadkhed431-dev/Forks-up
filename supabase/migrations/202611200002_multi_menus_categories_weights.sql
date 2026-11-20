@@ -35,6 +35,14 @@ update public.rounds rd
 set menu_id = (select m.id from public.restaurant_menus m where m.restaurant_id=rd.restaurant_id order by m.created_at limit 1)
 where rd.menu_id is null and rd.restaurant_id is not null;
 
+update public.restaurant_menu_items
+set weight_options = case
+  when category='السمك' then array['سمكة واحدة','نصف كيلو','كيلو']::text[]
+  when category='الجمبري' then array['ربع كيلو','نصف كيلو','كيلو']::text[]
+  else weight_options
+end
+where cardinality(weight_options)=0 and category in ('السمك','الجمبري');
+
 -- Allow the same dish in more than one named menu.
 alter table public.restaurant_menu_items
   drop constraint if exists restaurant_menu_items_restaurant_id_normalized_name_key;
