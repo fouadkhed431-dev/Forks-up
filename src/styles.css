@@ -132,3 +132,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .employee-suggestions button:active{background:#e9e2d4}
 .employee-name-hint{display:block;margin-top:6px;color:#858b84;font-size:10px}
 .guest-theme-icon{width:36px;height:36px;flex-basis:36px;border-radius:50%;font-size:20px}
+
+/* Center the food illustration directly above the theme headline. */
+.guest-theme-banner{flex-direction:column;align-items:center;justify-content:center;gap:7px;text-align:center}
+.guest-theme-banner>div{width:100%;text-align:center}
+.guest-theme-icon{width:34px;height:34px;flex:0 0 34px;border-radius:50%;font-size:21px}
+.guest-theme-banner b{line-height:1.45}
