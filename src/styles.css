@@ -76,22 +76,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 
 /* Safe decorative food photography: paint only, no layout/position/stacking changes. */
 .guest-wrap.theme-seafood{
-  background-image:linear-gradient(rgba(234,244,245,.78),rgba(234,244,245,.84)),url('https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1600&q=75');
+  background-image:linear-gradient(rgba(234,244,245,.34),rgba(234,244,245,.44)),url('https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1600&q=75');
   background-position:center top;background-size:cover;background-repeat:no-repeat;
 }
 .guest-wrap.theme-bistro{
-  background-image:linear-gradient(rgba(244,238,229,.80),rgba(244,238,229,.86)),url('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=75');
+  background-image:linear-gradient(rgba(244,238,229,.34),rgba(244,238,229,.44)),url('https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=1600&q=75');
   background-position:center top;background-size:cover;background-repeat:no-repeat;
 }
 .guest-wrap.theme-pizza{
-  background-image:linear-gradient(rgba(248,240,232,.80),rgba(248,240,232,.86)),url('https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=75');
+  background-image:linear-gradient(rgba(248,240,232,.34),rgba(248,240,232,.44)),url('https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=1600&q=75');
   background-position:center top;background-size:cover;background-repeat:no-repeat;
 }
 .guest-wrap.theme-grill{
-  background-image:linear-gradient(rgba(242,233,223,.80),rgba(242,233,223,.86)),url('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=75');
+  background-image:linear-gradient(rgba(242,233,223,.34),rgba(242,233,223,.44)),url('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=75');
   background-position:center top;background-size:cover;background-repeat:no-repeat;
 }
 .guest-wrap.theme-general{
-  background-image:linear-gradient(rgba(243,235,221,.82),rgba(243,235,221,.88)),url('https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1600&q=75');
+  background-image:linear-gradient(rgba(243,235,221,.34),rgba(243,235,221,.44)),url('https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1600&q=75');
   background-position:center top;background-size:cover;background-repeat:no-repeat;
 }
