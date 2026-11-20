@@ -636,7 +636,13 @@ function App() {
           onToggle={() => updateRound({ status: roundData.status === 'open' ? 'closed' : 'open' })}
         />}
 
-        {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={async (restaurantId,menuId) => { let targetMenu=menuId||null; if(restaurantId&&!targetMenu){const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).order('created_at').limit(1).maybeSingle();if(e)throw e;targetMenu=data?.id||null;} await updateRound({restaurant_id:restaurantId,menu_id:targetMenu}); }} busy={busy}
+        {tab === 'menu' && <RestaurantMenuPanel round={roundData} restaurants={restaurants} onAssign={async (restaurantId,menuId) => {
+            let targetMenu=menuId||null;
+            if(restaurantId&&!targetMenu){const {data,error:e}=await supabase.from('restaurant_menus').select('id').eq('restaurant_id',restaurantId).order('created_at').limit(1).maybeSingle();if(e)throw e;targetMenu=data?.id||null;}
+            const {data,error:e}=await supabase.from('rounds').update({restaurant_id:restaurantId,menu_id:targetMenu}).eq('id',roundData.id).select('id').maybeSingle();
+            if(e)throw e;if(!data)throw new Error('لم يتم ربط المطعم بالجولة. تحقق من صلاحيات المسؤول.');
+            await loadRound(roundData.id);await loadRestaurants();flash('تم ربط المطعم والمنيو بالجولة');
+          }} busy={busy}
           onCreateMenu={async name => {
             const {data,error:e}=await supabase.from('restaurant_menus').insert({restaurant_id:roundData.restaurant_id,name}).select().single();if(e)throw e;
             const isBistro=restaurants.find(r=>r.id===roundData.restaurant_id)?.name?.trim().toLowerCase()==='bistro';
@@ -650,8 +656,17 @@ function App() {
           onRenameCategory={async (id,oldName,name)=>{const {error:e}=await supabase.from('restaurant_menu_categories').update({name}).eq('id',id);if(e)throw e;await supabase.from('restaurant_menu_items').update({category:name}).eq('menu_id',roundData.menu_id).eq('category',oldName);await loadRound(roundData.id);}}
           onDeleteCategory={async (id,oldName)=>{await supabase.from('restaurant_menu_items').update({category:'أصناف أخرى'}).eq('menu_id',roundData.menu_id).eq('category',oldName);if(id){const {error:e}=await supabase.from('restaurant_menu_categories').delete().eq('id',id);if(e)throw e;}await loadRound(roundData.id);}}
           onAdd={async item=>{const name=item.name.trim();if(!name)throw new Error('اكتب اسم الصنف.');const row={restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name,normalized_name:normalizeItemName(name),category:item.category,subcategory:item.subcategory||'',preparation:item.preparation||'',weight_options:item.weight_options||[],active:true,sort_order:0};const {error:e}=await supabase.from('restaurant_menu_items').upsert(row,{onConflict:'menu_id,normalized_name'});if(e)throw e;await loadRound(roundData.id);flash('تمت إضافة الصنف');}}
-          onSaveItem={async item=>{const {error:e}=await supabase.from('restaurant_menu_items').update({name:item.name,normalized_name:normalizeItemName(item.name),category:item.category,weight_options:item.weight_options||[],default_price:item.default_price??null,single_price:item.single_price??null,double_price:item.double_price??null,updated_at:new Date().toISOString()}).eq('id',item.id);if(e)throw e;await loadRound(roundData.id);}}
-          onDeleteItem={async item=>{const {error:e}=await supabase.from('restaurant_menu_items').update({active:false,updated_at:new Date().toISOString()}).eq('id',item.id);if(e)throw e;await loadRound(roundData.id);}}
+          onSaveItem={async item=>{
+            const payload={name:item.name,normalized_name:normalizeItemName(item.name),category:item.category,weight_options:item.weight_options||[],default_price:item.default_price??null,single_price:item.single_price??null,double_price:item.double_price??null,updated_at:new Date().toISOString()};
+            const {data,error:e}=await supabase.from('restaurant_menu_items').update(payload).eq('id',item.id).select('id').maybeSingle();
+            if(e)throw e;if(!data)throw new Error('لم يتم حفظ التعديل. قد تكون صلاحيات تعديل المنيو غير متاحة لهذا الحساب.');
+            await loadRound(roundData.id);flash('تم حفظ تعديل الصنف');
+          }}
+          onDeleteItem={async item=>{
+            const {data,error:e}=await supabase.from('restaurant_menu_items').update({active:false,updated_at:new Date().toISOString()}).eq('id',item.id).select('id').maybeSingle();
+            if(e)throw e;if(!data)throw new Error('لم تتم إزالة الصنف. تحقق من صلاحيات المسؤول.');
+            await loadRound(roundData.id);flash('تمت إزالة الصنف من المنيو');
+          }}
           onImportRoundItems={async()=>{const names=[...new Set((roundData.orders||[]).flatMap(o=>o.order_items||[]).map(i=>i.description?.trim()).filter(Boolean))];if(!names.length)throw new Error('لا توجد أصناف لاستخراجها.');const rows=names.map(name=>({restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name,normalized_name:normalizeItemName(name),category:'أصناف أخرى',active:true}));const {error:e}=await supabase.from('restaurant_menu_items').upsert(rows,{onConflict:'menu_id,normalized_name',ignoreDuplicates:true});if(e)throw e;await loadRound(roundData.id);}}
           onApprove={async request=>{const {error:e}=await supabase.from('restaurant_menu_items').upsert({restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name:request.requested_name,normalized_name:request.normalized_name,category:'أصناف أخرى',active:true},{onConflict:'menu_id,normalized_name'});if(e)throw e;const {error:de}=await supabase.from('menu_item_requests').delete().eq('id',request.id);if(de)throw de;await loadRound(roundData.id);}}
           onDismiss={async request=>{const {error:e}=await supabase.from('menu_item_requests').delete().eq('id',request.id);if(e)throw e;await loadRound(roundData.id);}}
@@ -1603,7 +1618,13 @@ function RestaurantMenuPanel({round,restaurants=[],onAssign,busy,onAdd,onSaveIte
  const itemName=category==='السمك'?['سمك '+sub,prep].filter(Boolean).join(' — '):category==='الجمبري'?['جمبري',prep].join(' — '):name.trim();
  return <div className="panel card">
  <div className="panel-title"><div><h3>إدارة المنيو</h3><p className="muted">تحكم كامل في المنيوهات والأقسام والأصناف والأوزان.</p></div></div>
- {!round.restaurant_id?<div className="empty-inline"><select defaultValue="" onChange={e=>e.target.value&&onAssign(e.target.value)}><option value="">اختر مطعماً</option>{restaurants.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></div>:<>
+ <section className="sub-panel" style={{display:'grid',gap:8,border:'1px solid var(--line)',borderRadius:12,padding:12}}>
+ <b>المطعم المرتبط بهذه الجولة</b>
+ <select value={round.restaurant_id||''} onChange={e=>e.target.value&&run(()=>onAssign(e.target.value,''))}>
+  <option value="">اختر مطعماً</option>{restaurants.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+ </select>
+ </section>
+ {!round.restaurant_id?<div className="empty-inline">اختر المطعم لعرض منيوه.</div>:<>
  <section className="sub-panel" style={{display:'grid',gap:8,border:'1px solid var(--line)',borderRadius:12,padding:12}}>
  <b>منيوهات المطعم</b>
  <select value={round.menu_id||''} onChange={e=>run(()=>onAssign(round.restaurant_id,e.target.value))}>{(round.menus||[]).map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select>
