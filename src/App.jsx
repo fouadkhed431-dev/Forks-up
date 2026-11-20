@@ -701,7 +701,7 @@ function App() {
           onImportRoundItems={async()=>{const names=[...new Set((roundData.orders||[]).flatMap(o=>o.order_items||[]).map(i=>i.description?.trim()).filter(Boolean))];if(!names.length)throw new Error('لا توجد أصناف لاستخراجها.');const rows=names.map(name=>({restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name,normalized_name:normalizeItemName(name),category:'أصناف أخرى',active:true}));const {error:e}=await supabase.from('restaurant_menu_items').upsert(rows,{onConflict:'menu_id,normalized_name',ignoreDuplicates:true});if(e)throw e;await loadRound(roundData.id);}}
           onApprove={async request=>{const {error:e}=await supabase.from('restaurant_menu_items').upsert({restaurant_id:roundData.restaurant_id,menu_id:roundData.menu_id,name:request.requested_name,normalized_name:request.normalized_name,category:'أصناف أخرى',active:true},{onConflict:'menu_id,normalized_name'});if(e)throw e;const {error:de}=await supabase.from('menu_item_requests').delete().eq('id',request.id);if(de)throw de;await loadRound(roundData.id);}}
           onDismiss={async request=>{const {error:e}=await supabase.from('menu_item_requests').delete().eq('id',request.id);if(e)throw e;await loadRound(roundData.id);}}
-        />
+        />}
         {tab === 'restaurant' && <RestaurantOrderSummary round={roundData} />}
 
         {tab === 'invoice' && <InvoicePanel
