@@ -48,6 +48,8 @@ function App() {
   const [resourceBusy, setResourceBusy] = useState(false);
   const [roundSearch, setRoundSearch] = useState('');
   const [restaurants, setRestaurants] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [showEmployeeManager, setShowEmployeeManager] = useState(false);
 
 
 
@@ -116,6 +118,14 @@ function App() {
     setRestaurants(data || []);
   }, [session?.user?.id]);
 
+  const loadEmployees = useCallback(async () => {
+    if (!session?.user?.id) return [];
+    const { data, error: queryError } = await supabase.from('employee_directory').select('id,employee_name,category,sort_order,normalized_name').order('sort_order').order('category').order('employee_name');
+    if (queryError) throw queryError;
+    setEmployees(data || []);
+    return data || [];
+  }, [session?.user?.id]);
+
   const loadRounds = useCallback(async () => {
     if (!session?.user?.id) return;
 
@@ -176,10 +186,12 @@ function App() {
     const [menuResult, requestResult, employeeResult, categoriesResult] = await Promise.all([
       effectiveMenuId ? supabase.from('restaurant_menu_items').select('*').eq('menu_id', effectiveMenuId).eq('active', true).order('sort_order').order('name') : Promise.resolve({ data: [], error: null }),
       restaurantId ? supabase.from('menu_item_requests').select('*').eq('round_id', id).order('created_at', { ascending: true }) : Promise.resolve({ data: [], error: null }),
-      supabase.from('employee_directory').select('id,employee_name').order('employee_name'),
+      supabase.from('employee_directory').select('id,employee_name,category,sort_order,normalized_name').order('sort_order').order('category').order('employee_name'),
       effectiveMenuId ? supabase.from('restaurant_menu_categories').select('*').eq('menu_id', effectiveMenuId).order('sort_order').order('name') : Promise.resolve({ data: [], error: null })
     ]);
     for (const result of [menuResult, requestResult, employeeResult, categoriesResult]) if (result.error) throw result.error;
+
+    setEmployees(employeeResult.data || []);
 
     const priceMap = Object.fromEntries(
       (priceResult.data || []).map(row => [row.normalized_name, Number(row.unit_price)])
@@ -196,6 +208,7 @@ function App() {
       menus: menusResult.data || [],
       menuCategories: categoriesResult.data || [],
       menuRequests: requestResult.data || [],
+      employeeDirectory: employeeResult.data || [],
       employeeNames: [...new Set([...(employeeResult.data || []).map(row => row.employee_name), ...getParticipants(orderResult.data || [])])].sort((a,b) => a.localeCompare(b,'ar'))
     });
   }, []);
@@ -204,11 +217,12 @@ function App() {
     if (session) {
       loadRounds().catch(report);
       loadRestaurants().catch(report);
+      loadEmployees().catch(report);
     } else {
       setRounds([]);
       setRoundData(null);
     }
-  }, [session, loadRounds, loadRestaurants, report]);
+  }, [session, loadRounds, loadRestaurants, loadEmployees, report]);
 
   useEffect(() => {
     if (session && activeId) {
@@ -450,6 +464,43 @@ function App() {
     }
   };
 
+  const saveEmployee = async employee => {
+    setBusy(true);
+    setError('');
+    try {
+      const { error: saveError } = await supabase.rpc('admin_update_employee', {
+        p_employee_id: employee.id,
+        p_employee_name: employee.employee_name.trim(),
+        p_category: (employee.category || '').trim(),
+        p_sort_order: Math.max(0, Number(employee.sort_order) || 0)
+      });
+      if (saveError) throw saveError;
+      await loadEmployees();
+      if (activeId) await loadRound(activeId);
+      flash('تم حفظ بيانات الموظف وتحديث اسمه في السجلات السابقة');
+    } catch (err) { report(err); }
+    finally { setBusy(false); }
+  };
+
+  const moveEmployee = async (employee, direction) => {
+    const group = employees.filter(row => (row.category || '') === (employee.category || '')).sort((a,b) => (a.sort_order || 0)-(b.sort_order || 0));
+    const index = group.findIndex(row => row.id === employee.id);
+    const target = group[index + direction];
+    if (!target) return;
+    setBusy(true);
+    try {
+      const updates = [
+        supabase.from('employee_directory').update({sort_order: target.sort_order ?? index}).eq('id', employee.id),
+        supabase.from('employee_directory').update({sort_order: employee.sort_order ?? index+direction}).eq('id', target.id)
+      ];
+      const results = await Promise.all(updates);
+      const failed = results.find(result => result.error);
+      if (failed) throw failed.error;
+      await loadEmployees();
+    } catch (err) { report(err); }
+    finally { setBusy(false); }
+  };
+
   const saveItemPrice = async (item, value) => {
     if (value === '' || !Number.isFinite(Number(value)) || Number(value) < 0) return;
     const { error: priceError } = await supabase
@@ -608,6 +659,16 @@ function App() {
 
       <ParticipantsDialog participants={participants} />
 
+      {rounds.length > 0 && <div className="round-switch" style={{ marginBottom: 18 }}>
+        <span>التنقل بين الجولات ({rounds.length})</span>
+        <input value={roundSearch} onChange={event => setRoundSearch(event.target.value)} placeholder="ابحث بنوع الطعام أو اسم الجولة" aria-label="البحث في الجولات" />
+        <select value={activeId || ''} onChange={event => setActiveId(event.target.value)}>
+          {rounds.filter(round => `${round.food_type} ${round.title || ''} ${new Date(round.created_at).toLocaleDateString('ar-EG')}`.toLocaleLowerCase('ar').includes(roundSearch.trim().toLocaleLowerCase('ar'))).map(round => <option key={round.id} value={round.id}>
+            {round.food_type} — {round.title || 'جولة'} — {new Date(round.created_at).toLocaleDateString('ar-EG')}
+          </option>)}
+        </select>
+      </div>}
+
       {!roundData ? <div className="empty card">
         <div className="empty-icon">🍽️</div>
         <h2>لسه مفيش جولات</h2>
@@ -748,16 +809,15 @@ function App() {
         {tab === 'share' && <SharePanel round={roundData} />}
         {tab === 'history' && <HistoryPanel logs={roundData.logs} />}
 
-        <div className="round-switch">
-          <span>أرشيف الجولات السابقة والحالية</span>
-          <input value={roundSearch} onChange={event => setRoundSearch(event.target.value)} placeholder="ابحث بنوع الطعام أو اسم الجولة" aria-label="البحث في أرشيف الجولات" />
-          <select value={roundData.id} onChange={event => setActiveId(event.target.value)}>
-            {rounds.filter(round => `${round.food_type} ${round.title || ''} ${new Date(round.created_at).toLocaleDateString('ar-EG')}`.toLocaleLowerCase('ar').includes(roundSearch.trim().toLocaleLowerCase('ar'))).map(round => <option key={round.id} value={round.id}>
-              {round.food_type} — {round.title || 'جولة'} — {new Date(round.created_at).toLocaleDateString('ar-EG')}
-            </option>)}
-          </select>
-        </div>
       </>}
+
+      <section className="panel card" style={{ marginTop: 24 }}>
+        <div className="panel-title" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <div><h3>إدارة الموظفين</h3><p className="muted">تعديل الأسماء المسجلة، تقسيم الموظفين إلى مجموعات، والتحكم في ترتيب ظهورهم.</p></div>
+          <button type="button" className="secondary" onClick={()=>setShowEmployeeManager(value=>!value)}>{showEmployeeManager ? 'إخفاء القائمة' : `إدارة ${employees.length} موظف`}</button>
+        </div>
+        {showEmployeeManager && <EmployeeDirectoryPanel employees={employees} busy={busy} onSave={saveEmployee} onMove={moveEmployee} />}
+      </section>
 
       <section className="panel card" style={{ marginTop: 24 }}>
         <div className="panel-title"><div><h3>النسخ الاحتياطي</h3><p className="muted">تصدير بيانات جولات Hall No. 213 أو استعادة نسخة محفوظة.</p></div></div>
@@ -952,6 +1012,37 @@ function Stat({ label, value, onClick }) {
 }
 
 // نافذة عرض أسماء المشاركين
+
+function EmployeeDirectoryPanel({ employees = [], busy, onSave, onMove }) {
+  const [drafts, setDrafts] = useState({});
+  const categories = [...new Set(employees.map(person => (person.category || '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
+  const getDraft = person => drafts[person.id] || { employee_name: person.employee_name, category: person.category || '', sort_order: person.sort_order ?? 0 };
+  const groups = [...new Set(employees.map(person => (person.category || '').trim() || 'بدون تصنيف'))];
+  return <div style={{display:'grid',gap:18,marginTop:16}}>
+    <div className="muted" style={{fontSize:13}}>تغيير الاسم ينعكس على الطلبات القديمة والمشاركين في الأصناف المشتركة، دون حذف أي طلب أو فاتورة. استخدم التصنيف مثل: الإدارة، الهندسة، التشغيل.</div>
+    {!employees.length ? <div className="empty-inline">لا توجد أسماء مسجلة بعد.</div> : groups.map(group => {
+      const rows = employees.filter(person => ((person.category || '').trim() || 'بدون تصنيف') === group).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)||a.employee_name.localeCompare(b.employee_name,'ar'));
+      return <div key={group} style={{display:'grid',gap:10}}>
+        <h4 style={{margin:'0 0 2px',color:'var(--primary,#174b3b)'}}>{group} <small className="muted">({rows.length})</small></h4>
+        {rows.map((person,index)=>{
+          const draft=getDraft(person);
+          return <div key={person.id} style={{display:'grid',gridTemplateColumns:'minmax(130px,1.3fr) minmax(110px,1fr) 82px auto',gap:8,alignItems:'end',padding:12,border:'1px solid var(--line,#e6dfd0)',borderRadius:12}}>
+            <label>اسم الموظف<input value={draft.employee_name} maxLength="100" onChange={e=>setDrafts(old=>({...old,[person.id]:{...getDraft(person),employee_name:e.target.value}}))}/></label>
+            <label>التصنيف<input list="employee-category-options" value={draft.category} maxLength="60" placeholder="مثلاً: الهندسة" onChange={e=>setDrafts(old=>({...old,[person.id]:{...getDraft(person),category:e.target.value}}))}/></label>
+            <label>الترتيب<input type="number" min="0" max="9999" value={draft.sort_order} onChange={e=>setDrafts(old=>({...old,[person.id]:{...getDraft(person),sort_order:e.target.value}}))}/></label>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              <button type="button" className="secondary small-btn" title="لأعلى" disabled={busy||index===0} onClick={()=>onMove(person,-1)}>↑</button>
+              <button type="button" className="secondary small-btn" title="لأسفل" disabled={busy||index===rows.length-1} onClick={()=>onMove(person,1)}>↓</button>
+              <button type="button" className="primary small-btn" disabled={busy||draft.employee_name.trim().length<2} onClick={()=>onSave({...person,...draft})}>حفظ</button>
+            </div>
+          </div>;
+        })}
+      </div>;
+    })}
+    <datalist id="employee-category-options">{categories.map(category=><option key={category} value={category}/>)}</datalist>
+  </div>;
+}
+
 function ParticipantsDialog({ participants }) {
   return <dialog id="participants-dialog" className="dialog card">
     <div className="modal-head">
