@@ -40,7 +40,7 @@ const THEME_PRESENTATION = {
 };
 
 const toItemsPayload = items => items.filter(item => item.description?.trim()).map(item => ({
-  description: [item.description.trim(), item.variant].filter(Boolean).join(' — '),
+  description: [item.description.trim(), item.protein, item.variant].filter(Boolean).join(' — '),
   quantity: Math.max(1, Math.min(99, Number(item.quantity) || 1)),
   kind: item.kind === 'shared' ? 'shared' : 'individual',
   participants: item.kind === 'shared' ? [...new Set((item.participants || []).map(name => name.trim()).filter(Boolean))] : []
@@ -1448,11 +1448,16 @@ function MenuItemPicker({ menuItems = [], item, onChange }) {
     .sort((a,b) => MENU_CATEGORIES.indexOf(a)-MENU_CATEGORIES.indexOf(b));
   const inCategory = menuItems.filter(row => (row.category || 'أصناف أخرى') === category);
   const speciesList = [...new Set(inCategory.map(row => row.subcategory).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ar'));
-  const choose = value => value === '__custom__'
-    ? onChange({ description: '', customRequest: true, variant: '' })
-    : onChange({ description: value, customRequest: false, variant: '' });
+  const choose = value => {
+    const protein = /برجر/.test(category)
+      ? (/دجاج|فراخ/.test(category) ? 'دجاج' : /لحم/.test(category) ? 'لحم' : '')
+      : '';
+    return value === '__custom__'
+      ? onChange({ description: '', customRequest: true, variant: '', protein: '' })
+      : onChange({ description: value, customRequest: false, variant: '', protein });
+  };
   return <div style={{display:'grid',gap:8}}>
-    <select required value={category} onChange={e=>{setCategory(e.target.value);setSpecies('');onChange({description:'',customRequest:false});}}>
+    <select required value={category} onChange={e=>{setCategory(e.target.value);setSpecies('');onChange({description:'',customRequest:false,variant:'',protein:''});}}>
       <option value="">اختر القسم</option>
       {categories.map(value=><option key={value}>{value}</option>)}
     </select>
